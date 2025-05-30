@@ -1,4 +1,4 @@
-name: rvsdoc
+name: Deploy Node Application
 
 on:
   push:
