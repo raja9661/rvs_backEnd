@@ -13,10 +13,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Login to Docker Hub
-        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build Docker Image
-        run: docker build -t raja9661/rvs_backend .
+        run: docker build -t raja9661/rvs_backend:latest .
 
       - name: Publish Image to Docker Hub
         run: docker push raja9661/rvs_backend:latest
@@ -25,41 +28,17 @@ jobs:
     needs: build
     runs-on: self-hosted
     steps:
+      - name: Clean Image
+        run: docker system prune -af
+
       - name: Pull image from Docker Hub
         run: docker pull raja9661/rvs_backend:latest
 
-      - name: Delete old container
-        run: docker rm -f rvs_backend-container || true
+      - name: Stop existing container (if running)
+        run: |
+          docker stop nodejs-container || true
+          docker rm nodejs-container || true
+        continue-on-error: true
 
       - name: Run Docker Container
-        run: docker run -d -p 8080:8080 --name rvs_backend-container -e MONGO_PASSWORD='${{ secrets.MONGO_PASSWORD }}' raja9661/rvs_backend:latest
-# name: Deploy Node Application
-
-# on:
-#   push:
-#     branches:
-#       - [main]
-
-# jobs:
-#   build:
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: Checkout Source
-#         uses: actions/checkout@v4
-#       - name: Login to docker hub
-
-#       - name: Build Docker Image
-#         run: docker build -t raja9661/rvs_backend  .
-#       - name: Publish Image to docker hub
-#         run: docker push raja9661/rvs_backend:latest
-
-#   deploy:
-#     needs: build
-#     runs-on: self-hosted
-#     steps:
-#       - name: Pull image from docker hub
-#         run: docker pull raja9661/rvs_backend:latest
-#       - name: Delete old container
-#         run: docker rm -f rvs_backend-container
-#       - name: Run Docker Container
-#         run: docker run -d -p 8080:8080 --name rvs_backend-container -e MONGO_PASSWORD='${{ secrets.MONGO_PASSWORD }}' raja9661/rvs_backend
+        run: docker run -d --name nodejs-container -p 8080:8080 -e MONGO_URI="${{ secrets.MONGO_URI }}"  -e PORT="${{ secrets.PORT }}" -e EMAIL="${{ secrets.EMAIL }}" -e PASSWORD="${{ secrets.PASSWORD }}" -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" -e AWS_REGION="${{ secrets.AWS_REGION }}" -e AWS_BUCKET_NAME="${{ secrets.AWS_BUCKET_NAME }}"  -e DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}" -e DOCKER_PASSWORD="${{ secrets.DOCKER_PASSWORD }}" raja9661/rvs_backend:latest
