@@ -3,7 +3,7 @@ name: Deploy Node Application
 on:
   push:
     branches:
-      - [main]
+      - main
 
 jobs:
   build:
@@ -11,20 +11,55 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
-      - name: Login to docker hub
-        run: docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
       - name: Build Docker Image
-        run: docker build -t raja9661/rvs_backend  .
-      - name: Publish Image to docker hub
+        run: docker build -t raja9661/rvs_backend .
+
+      - name: Publish Image to Docker Hub
         run: docker push raja9661/rvs_backend:latest
 
   deploy:
     needs: build
     runs-on: self-hosted
     steps:
-      - name: Pull image from docker hub
+      - name: Pull image from Docker Hub
         run: docker pull raja9661/rvs_backend:latest
+
       - name: Delete old container
-        run: docker rm -f rvs_backend-container
+        run: docker rm -f rvs_backend-container || true
+
       - name: Run Docker Container
-        run: docker run -d -p 8080:8080 --name rvs_backend-container -e MONGO_PASSWORD='${{ secrets.MONGO_PASSWORD }}' raja9661/rvs_backend
+        run: docker run -d -p 8080:8080 --name rvs_backend-container -e MONGO_PASSWORD='${{ secrets.MONGO_PASSWORD }}' raja9661/rvs_backend:latest
+# name: Deploy Node Application
+
+# on:
+#   push:
+#     branches:
+#       - [main]
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout Source
+#         uses: actions/checkout@v4
+#       - name: Login to docker hub
+
+#       - name: Build Docker Image
+#         run: docker build -t raja9661/rvs_backend  .
+#       - name: Publish Image to docker hub
+#         run: docker push raja9661/rvs_backend:latest
+
+#   deploy:
+#     needs: build
+#     runs-on: self-hosted
+#     steps:
+#       - name: Pull image from docker hub
+#         run: docker pull raja9661/rvs_backend:latest
+#       - name: Delete old container
+#         run: docker rm -f rvs_backend-container
+#       - name: Run Docker Container
+#         run: docker run -d -p 8080:8080 --name rvs_backend-container -e MONGO_PASSWORD='${{ secrets.MONGO_PASSWORD }}' raja9661/rvs_backend
