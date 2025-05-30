@@ -54,11 +54,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 
-const _dirname = path.resolve();
-const frontendBuildPath = path.join(_dirname, '../client/dist');
+// const _dirname = path.resolve();
+// const frontendBuildPath = path.join(_dirname, '../client/dist');
 
 
-app.use(express.static(frontendBuildPath));
+// app.use(express.static(frontendBuildPath));
 
 
 app.use('/auth', authRouter);
@@ -70,7 +70,7 @@ app.use('/about', AboutUs);
 
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(frontendBuildPath, 'index.html'));
+  res.send('This is working now.');
 });
 
 
