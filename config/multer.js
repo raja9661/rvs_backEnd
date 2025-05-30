@@ -1,8 +1,10 @@
 const multer = require('multer');
 const multerS3 = require('multer-s3');
+const dotenv = require('dotenv');
 const s3 = require('./s3Config'); // Import your S3Client
 
 const path = require('path');
+dotenv.config();
 
 // Dynamic folder logic based on route
 function chooseFolder(req) {
@@ -13,7 +15,7 @@ function chooseFolder(req) {
 
 const upload = multer({
   storage: multerS3({
-    s3: s3,
+    s3: s3,             
     bucket: process.env.AWS_BUCKET_NAME,
     contentType: multerS3.AUTO_CONTENT_TYPE,
     key: function (req, file, cb) {
