@@ -80,9 +80,10 @@ connectdb();
 
 
 const port = process.env.PORT || 8080;
-server.listen(port, () => {
-  console.log(`🚀 Server is Running on Port: ${port}`);
-});
+// server.listen(port, () => {
+//   console.log(`🚀 Server is Running on Port: ${port}`);
+// });
+app.listen(port, '0.0.0.0', () => console.log("Server running on port 8080"));
 
 
 // const express = require('express')
