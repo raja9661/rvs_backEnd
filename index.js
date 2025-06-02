@@ -62,12 +62,12 @@ app.use(bodyParser.json());
 // app.use(express.static(frontendBuildPath));
 
 
-app.use('/api/auth', authRouter);
-app.use('/api/kyc', kycRoutes);
-app.use('/api/access', accessManager);
-app.use('/api/mapping', Mapping);
-app.use('/api/dashboard', LiveDashRoute);
-app.use('/api/about', AboutUs);
+app.use('/auth', authRouter);
+app.use('/kyc', kycRoutes);
+app.use('/access', accessManager);
+app.use('/mapping', Mapping);
+app.use('/dashboard', LiveDashRoute);
+app.use('/about', AboutUs);
 
 
 app.get('*', (req, res) => {
