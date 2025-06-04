@@ -1030,6 +1030,7 @@ const FIELD_ORDERS = {
     'bankCode',
     'clientCode',
     'vendorName',
+    'vendorStatus',
     'dateIn',
     'status',
     'dateInDate',
@@ -1069,18 +1070,23 @@ const FIELD_ORDERS = {
     'bankCode',
     'clientCode',
     'vendorName',
+    'vendorStatus',
     'dateIn',
     'dateInDate',
+    'status',
     'caseStatus',
     'productType',
     'listByEmployee',
     'dateOut',
+    'dateOutInDay',
     'sentBy',
     'autoOrManual',
     'caseDoneBy',
     'clientTAT',
+    'NameUploadBy',
     'customerCare',
     'sentDate',
+    'sentDateInDay',
     'clientType',
     'dedupBy',
     'createdAt',
@@ -1114,302 +1120,6 @@ const FIELD_ORDERS = {
   ]
 };
 
-// Get Tracker Data
-exports.getTrackerData = async (req, res) => {
-  try {
-    const { role, userId, name } = req.query;
-    console.log("Requested Role:", role);
-    console.log("userId:", userId);
-    console.log("name:", name);
-
-    let projection = {};
-
-    if (role === "admin") {
-      projection = {
-        _id: 0,
-        attachments: 1,
-        userId: 0,
-        caseId: 1,
-        remarks: 1,
-        name: 1,
-        details: 1,
-        details1: 1,
-        priority: 1,
-        correctUPN: 1,
-        product: 1,
-        updatedProductName: 1,
-        accountNumber: 1,
-        requirement: 1,
-        updatedRequirement: 1,
-        accountNumberDigit: 1,
-        bankCode: 1,
-        clientCode: 1,
-        vendorName: 1,
-        dateIn: 1,
-        status: 1,
-        dateInDate: 1,
-        caseStatus: 1,
-        productType: 1,
-        listByEmployee: 1,
-        // dateOut: 1,
-        dateOutInDay: 1,
-        sentBy: 1,
-        autoOrManual: 1,
-        caseDoneBy: 1,
-        clientTAT: 1,
-        customerCare: 1,
-        NameUploadBy: 1,
-        sentDate: 1,
-        sentDateInDay: 1,
-        clientType: 1,
-        dedupBy: 1,
-        ipAddress: 1,
-        isRechecked: 1
-      };
-
-      const trackerData = await KYC.find({}, projection)
-        .populate("userId", "name email phoneNumber userId")
-        .sort({ _id: -1 });
-
-      const orderedData = trackerData;
-      return res.json(orderedData);
-
-    } else if (role === "employee") {
-      projection = {
-        _id: 0,
-        caseId: 1,
-        attachments: 1,
-        remarks: 1,
-        name: 1,
-        details: 1,
-        details1: 1,
-        priority: 1,
-        correctUPN: 1,
-        product: 1,
-        updatedProductName: 1,
-        accountNumber: 1,
-        requirement: 1,
-        updatedRequirement: 1,
-        accountNumberDigit: 1,
-        bankCode: 1,
-        clientCode: 1,
-        vendorName: 1,
-        dateIn: 1,
-        dateInDate: 1,
-        caseStatus: 1,
-        productType: 1,
-        listByEmployee: 1,
-        dateOut: 1,
-        sentBy: 1,
-        autoOrManual: 1,
-        caseDoneBy: 1,
-        clientTAT: 1,
-        customerCare: 1,
-        sentDate: 1,
-        clientType: 1,
-        dedupBy: 1,
-        createdAt: 1,
-        updatedAt: 1,
-      };
-
-      const employeeAccess = await EmployeeAccess.findOne({
-        employeeName: name,
-      });
-      const editableColumns = employeeAccess?.editableColumns || [];
-      const EmpData = await KYC.find({ listByEmployee: name }, projection).sort(
-        { _id: -1 }
-      );
-
-      const orderedData = EmpData.map(doc => orderFields(doc, FIELD_ORDERS.employee));
-      return res.json({ data: orderedData, editableColumns });
-
-    } else if (role === "client") {
-      projection = {
-        _id: 0,
-        userId: 0,
-        caseId: 1,
-        attachments: 1,
-        remarks: 1,
-        name: 1,
-        details: 1,
-        details1: 1,
-        priority: 1,
-        correctUPN: 1,
-        product: 1,
-        updateProductName: 1,
-        accountNumber: 1,
-        requirement: 1,
-        updatedRequirement: 1,
-        clientCode: 1,
-        dateIn: 1,
-        dateInDate: 1,
-        caseStatus: 1,
-        productType: 1,
-        listByEmployee: 1,
-        dateOut: 1,
-        sentBy: 1,
-        caseDoneBy: 1,
-        customerCare: 1,
-        sentDate: 1,
-      };
-
-      const trackerData = await KYC.find({ userId: userId }, projection)
-        .populate("userId", "name email phoneNumber userId")
-        .sort({ _id: -1 });
-
-      const orderedData = trackerData.map(doc => orderFields(doc, FIELD_ORDERS.client));
-      return res.json(orderedData);
-    }
-
-    res.status(400).json({ success: false, message: "Invalid role specified" });
-  } catch (error) {
-    console.error("Error fetching tracker data:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch data" });
-  }
-};
-// exports.getTrackerData = async (req, res) => {
-//   try {
-//     const { role, userId, name } = req.query;
-//     // console.log(userId)
-//     console.log("Requested Role:", role);
-//     console.log("userId:", userId);
-//     console.log("name:", name);
-
-//     let projection = {};
-
-//     if (role === "admin") {
-//       // Admin can see all columns
-//       projection = {
-//         _id: 0,
-//         userId: 0,
-//         attachments:1,
-//         caseId: 1,
-//         remarks: 1,
-//         name: 1,
-//         details: 1,
-//         details1: 1,
-//         priority: 1,
-//         correctUPN: 1,
-//         product: 1,
-//         updatedProductName: 1,
-//         accountNumber: 1,
-//         requirement: 1,
-//         updatedRequirement: 1,
-//         accountNumberDigit: 1,
-//         bankCode: 1,
-//         clientCode: 1,
-//         vendorName: 1,
-//         dateIn: 1,
-//         status: 1,
-//         dateInDate: 1,
-//         caseStatus: 1,
-//         productType: 1,
-//         listByEmployee: 1,
-//         dateOut: 1,
-//         sentBy: 1,
-//         autoOrManual: 1,
-//         caseDoneBy: 1,
-//         clientTAT: 1,
-//         customerCare: 1,
-//         NameUploadBy: 1,
-//         sentDate: 1,
-//         clientType: 1,
-//         dedupBy: 1,
-//         ipAddress: 1
-//       };
-//     } else if (role === "employee") {
-//       // Employee-specific projection
-//       projection = {
-//         _id: 0, // Exclude _id
-//         caseId: 1,
-//         attachments:1,
-//         remarks: 1,
-//         name: 1,
-//         details: 1,
-//         details1: 1,
-//         priority: 1,
-//         correctUPN: 1,
-//         product: 1,
-//         updatedProductName: 1,
-//         accountNumber: 1,
-//         requirement: 1,
-//         updatedRequirement: 1,
-//         accountNumberDigit: 1,
-//         bankCode: 1,
-//         clientCode: 1,
-//         vendorName: 1,
-//         dateIn: 1,
-//         dateInDate: 1,
-//         caseStatus: 1,
-//         productType: 1,
-//         listByEmployee: 1,
-//         dateOut: 1,
-//         sentBy: 1,
-//         autoOrManual: 1,
-//         caseDoneBy: 1,
-//         clientTAT: 1,
-//         customerCare: 1,
-//         sentDate: 1,
-//         clientType: 1,
-//         dedupBy: 1,
-//         createdAt: 1,
-//         updatedAt: 1,
-//       };
-//       // Fetch editable columns for the employee
-//       const employeeAccess = await EmployeeAccess.findOne({
-//         employeeName: name,
-//       });
-//       const editableColumns = employeeAccess?.editableColumns || [];
-//       const EmpData = await KYC.find({ listByEmployee: name }, projection).sort(
-//         { _id: -1 }
-//       );
-//       return res.json({ data: EmpData, editableColumns });
-//     } else if (role === "client") {
-//       let projection = {
-//         _id: 0,
-//         userId: 0,
-//         caseId: 1,
-//         attachments:1,
-//         remarks: 1,
-//         name: 1,
-//         details: 1,
-//         details1: 1,
-//         priority: 1,
-//         correctUPN: 1,
-//         product: 1,
-//         updateProductName: 1,
-//         accountNumber: 1,
-//         requirement: 1,
-//         updatedRequirement: 1,
-//         clientCode: 1,
-//         dateIn: 1,
-//         dateInDate: 1,
-//         caseStatus: 1,
-//         productType: 1,
-//         listByEmployee: 1,
-//         dateOut: 1,
-//         sentBy: 1,
-//         caseDoneBy: 1,
-//         customerCare: 1,
-//         sentDate: 1,
-//       };
-//       const trackerData = await KYC.find({ userId: userId }, projection)
-//         .populate("userId", "name email phoneNumber userId")
-//         .sort({ _id: -1 });
-//       return res.json(trackerData);
-//     }
-
-//     // Fetch data for admin role
-//     const trackerData = await KYC.find({}, projection)
-//       .populate("userId", "name email phoneNumber userId")
-//       .sort({ _id: -1 });
-
-//     res.json(trackerData);
-//   } catch (error) {
-//     console.error("Error fetching tracker data:", error);
-//     res.status(500).json({ success: false, message: "Failed to fetch data" });
-//   }
-// };
 exports.getTrackerData = async (req, res) => {
   try {
     const { role, userId, name } = req.query;
@@ -1448,6 +1158,7 @@ exports.getTrackerData = async (req, res) => {
         productType: 1,
         listByEmployee: 1,
         dateOut: 1,
+        dateOutInDay: 1,
         sentBy: 1,
         autoOrManual: 1,
         caseDoneBy: 1,
@@ -1455,6 +1166,7 @@ exports.getTrackerData = async (req, res) => {
         customerCare: 1,
         NameUploadBy: 1,
         sentDate: 1,
+        sentDateInDay: 1,
         clientType: 1,
         dedupBy: 1,
         ipAddress: 1,
@@ -1488,18 +1200,22 @@ exports.getTrackerData = async (req, res) => {
         bankCode: 1,
         clientCode: 1,
         vendorName: 1,
+        vendorStatus: 1,
         dateIn: 1,
         dateInDate: 1,
+        status: 1,
         caseStatus: 1,
         productType: 1,
         listByEmployee: 1,
         dateOut: 1,
+        dateOutInDay: 1,
         sentBy: 1,
         autoOrManual: 1,
         caseDoneBy: 1,
         clientTAT: 1,
         customerCare: 1,
         sentDate: 1,
+        sentDateInDay: 1,
         clientType: 1,
         dedupBy: 1,
         createdAt: 1,
