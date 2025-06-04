@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const XlsxPopulate = require("xlsx-populate");
 const mongoose = require("mongoose"); // Add this import for ObjectId conversion
-const moment = require("moment");
+const moment = require('moment-timezone');
 const Fuse = require("fuse.js");
 const User = require("../models/users");
 const { Product, Vendor, ClientCode } = require("../models/MappingItems");
@@ -33,7 +33,7 @@ const generateCaseId = () => {
 };
 
 const getFormattedDateTime = () => {
-  return moment().format("DD-MM-YYYY, hh:mm:ss A");
+  return moment().tz("Asia/Kolkata").format("DD-MM-YYYY, hh:mm:ss A");
 };
 
 
@@ -1037,6 +1037,7 @@ const FIELD_ORDERS = {
     'productType',
     'listByEmployee',
     'dateOut',
+    'dateOutInDay',
     'sentBy',
     'autoOrManual',
     'caseDoneBy',
@@ -1044,6 +1045,7 @@ const FIELD_ORDERS = {
     'customerCare',
     'NameUploadBy',
     'sentDate',
+    'sentDateInDay',
     'clientType',
     'dedupBy',
     'ipAddress',
@@ -1149,7 +1151,8 @@ exports.getTrackerData = async (req, res) => {
         caseStatus: 1,
         productType: 1,
         listByEmployee: 1,
-        dateOut: 1,
+        // dateOut: 1,
+        dateOutInDay: 1,
         sentBy: 1,
         autoOrManual: 1,
         caseDoneBy: 1,
@@ -1157,6 +1160,7 @@ exports.getTrackerData = async (req, res) => {
         customerCare: 1,
         NameUploadBy: 1,
         sentDate: 1,
+        sentDateInDay: 1,
         clientType: 1,
         dedupBy: 1,
         ipAddress: 1,
@@ -1167,7 +1171,7 @@ exports.getTrackerData = async (req, res) => {
         .populate("userId", "name email phoneNumber userId")
         .sort({ _id: -1 });
 
-      const orderedData = trackerData.map(doc => orderFields(doc, FIELD_ORDERS.admin));
+      const orderedData = trackerData;
       return res.json(orderedData);
 
     } else if (role === "employee") {
@@ -3478,6 +3482,7 @@ exports.batchUpdate = async (req, res) => {
       // Handle Closed status
       if ((updates.status === "Closed" || updates.vendorStatus === "Closed")) {
         update.dateOut = getFormattedDateTime();
+        update.dateOutInDay = getFormattedDateDay();
         
         // Calculate TAT based on sentDate if available, otherwise dateIn
         const startDate = caseDoc.sentDate ? parseCustomDateTime(caseDoc.sentDate) : 
@@ -3490,6 +3495,7 @@ exports.batchUpdate = async (req, res) => {
 
       // Handle Sent status
       if (updates.caseStatus === "Sent") {
+        update.sentDateInDay = getFormattedDateDay();
         if (!updates.sentBy) update.sentBy = "System";
         if (!updates.sentDate) update.sentDate = now;
       }

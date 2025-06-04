@@ -72,177 +72,52 @@ exports.getDashboardData = async (req, res) => {
   }
 };
 
-// Enhanced case details with better search
-// exports.getCaseDetails = async (req, res) => {
-//   try {
-//     const { type, year, month, clientType, clientCode, product, download } = req.query;
-//     const { role, user } = req.body;
-    
-//     let query = role === 'admin' ? {} : { listByEmployee: user };
-    
-//     // Handle today cases
-//     if (type === 'today') {
-//       const today = new Date();
-//       today.setHours(0, 0, 0, 0);
-//       query.createdAt = { $gte: today };
-//     } 
-//     // Handle other types
-//     else if (type === 'New Pending') {
-//       query.caseStatus = 'New Pending';
-//     } else if (type === 'closed') {
-//       query.status = 'Closed';
-//     } else if (type === 'highPriority') {
-//       query.priority = 'High';
-//     }
-    
-//     // Apply hierarchy filters
-//     if (type !== 'today') {
-//       if (year) query.year = year;
-//       if (month) query.month = month;
-//     }
-//     if (clientType) query.clientType = clientType;
-//     if (clientCode) query.clientCode = clientCode;
-//     if (product) query.product = product;
-
-//     // For downloads, return all matching records
-//     if (download) {
-//       const cases = await KYC.find(query).lean();
-//       const worksheet = XLSX.utils.json_to_sheet(cases);
-//       const workbook = XLSX.utils.book_new();
-//       XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
-//       const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      
-//       res.setHeader('Content-Disposition', 'attachment; filename="CaseDetails.xlsx"');
-//       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-//       return res.send(buffer);
-//     }
-
-//     // Always return full records for client-side filtering
-//     const fullRecords = await KYC.find(query).lean();
-
-//     // Handle aggregation based on hierarchy level
-//     if (product) {
-//       return res.json({ 
-//         success: true, 
-//         data: fullRecords, 
-//         records: fullRecords 
-//       });
-//     } 
-//     else if (clientCode) {
-//       const products = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$product', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ 
-//         success: true, 
-//         data: products, 
-//         records: fullRecords 
-//       });
-//     } 
-//     else if (clientType) {
-//       const clientCodes = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$clientCode', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ 
-//         success: true, 
-//         data: clientCodes, 
-//         records: fullRecords 
-//       });
-//     } 
-//     else if (type === 'today') {
-//       const clientTypes = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$clientType', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ 
-//         success: true, 
-//         data: clientTypes, 
-//         records: fullRecords 
-//       });
-//     }
-//     else if (month) {
-//       const clientTypes = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$clientType', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ 
-//         success: true, 
-//         data: clientTypes, 
-//         records: fullRecords 
-//       });
-//     }
-//     else if (year) {
-//       const months = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$month', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ 
-//         success: true, 
-//         data: months, 
-//         records: fullRecords 
-//       });
-//     }
-//     else {
-//       const years = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$year', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ 
-//         success: true, 
-//         data: years, 
-//         records: fullRecords 
-//       });
-//     }
-//   } catch (error) {
-//     console.error('Error fetching case details:', error);
-//     res.status(500).json({ success: false, message: 'Server error' });
-//   }
-// };
 exports.getCaseDetails = async (req, res) => {
   try {
     const { type, year, month, clientType, clientCode, product, download } = req.query;
     const { role, user } = req.body;
     
+    // 1. Base query with role enforcement and debug logging
     let query = role === 'admin' ? {} : { listByEmployee: user };
-    
-    // Handle today cases
+    console.log('Initial query:', JSON.stringify(query));
+
+    // 2. Handle today cases with proper date range
     if (type === 'today') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      query.createdAt = { $gte: today };
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      query.createdAt = { 
+        $gte: startOfDay,
+        $lte: endOfDay
+      };
+      console.log('Today query:', JSON.stringify(query.createdAt));
     } 
-    // Handle other types
-    else if (type === 'New Pending') {
-      query.caseStatus = 'New Pending';
-    } else if (type === 'closed') {
-      query.status = 'Closed';
-    } else if (type === 'highPriority') {
-      query.priority = 'High';
-    }
+    // 3. Case type filters
+    else if (type === 'New Pending') query.caseStatus = 'New Pending';
+    else if (type === 'closed') query.status = 'Closed';
+    else if (type === 'highPriority') query.priority = 'High';
     
-    // Apply hierarchy filters
+    // 4. Date filters (excluding today cases)
     if (type !== 'today') {
       if (year) query.year = year;
       if (month) query.month = month;
     }
+    
+    // 5. Hierarchy filters
     if (clientType) query.clientType = clientType;
     if (clientCode) query.clientCode = clientCode;
     if (product) query.product = product;
 
-    // Get full records for client-side processing
-    const fullRecords = await KYC.find(query)
-      .sort({ updatedAt: -1 })
-      .lean();
+    console.log('Final query:', JSON.stringify(query));
 
-    // For downloads
-    if (download) {
+    // 6. Get full records with debug
+    const fullRecords = await KYC.find(query).lean();
+    console.log(`Found ${fullRecords.length} records`);
+
+        if (download) {
       const worksheet = XLSX.utils.json_to_sheet(fullRecords);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
@@ -253,78 +128,67 @@ exports.getCaseDetails = async (req, res) => {
       return res.send(buffer);
     }
 
-    // Return appropriate aggregation based on level
-    let aggregatedData = [];
+    // 7. Determine hierarchy level
     const hierarchyLevel = product ? 'productDetails' : 
       clientCode ? 'product' : 
       clientType ? 'clientCode' : 
       type === 'today' || month ? 'clientType' : 
       year ? 'month' : 'year';
 
-    switch(hierarchyLevel) {
-      case 'productDetails':
-        aggregatedData = fullRecords;
-        break;
-      case 'product':
-        aggregatedData = await KYC.aggregate([
-          { $match: query },
-          { $group: { 
-            _id: '$product',
-            count: { $sum: 1 },
-            clientCode: { $first: '$clientCode' }
-          }}
-        ]);
-        break;
-      case 'clientCode':
-        aggregatedData = await KYC.aggregate([
-          { $match: query },
-          { $group: { 
-            _id: '$clientCode',
-            count: { $sum: 1 },
-            clientType: { $first: '$clientType' }
-          }}
-        ]);
-        break;
-      case 'clientType':
-        aggregatedData = await KYC.aggregate([
-          { $match: query },
-          { $group: { 
-            _id: '$clientType',
-            count: { $sum: 1 }
-          }}
-        ]);
-        break;
-      case 'month':
-        aggregatedData = await KYC.aggregate([
-          { $match: query },
-          { $group: { 
-            _id: '$month',
-            count: { $sum: 1 },
-            year: { $first: '$year' }
-          }}
-        ]);
-        break;
-      case 'year':
-        aggregatedData = await KYC.aggregate([
-          { $match: query },
-          { $group: { 
-            _id: '$year',
-            count: { $sum: 1 }
-          }}
-        ]);
-        break;
+    console.log('Hierarchy level:', hierarchyLevel);
+
+    // 8. Return aggregated data for navigation
+    let data = [];
+    
+    if (hierarchyLevel === 'productDetails') {
+      data = fullRecords;
+    }
+    else if (hierarchyLevel === 'product') {
+      const productMap = new Map();
+      fullRecords.forEach(item => {
+        const count = productMap.get(item.product) || 0;
+        productMap.set(item.product, count + 1);
+      });
+      data = Array.from(productMap, ([name, count]) => ({ name, count }));
+    }
+    else if (hierarchyLevel === 'clientCode') {
+      const clientMap = new Map();
+      fullRecords.forEach(item => {
+        const count = clientMap.get(item.clientCode) || 0;
+        clientMap.set(item.clientCode, count + 1);
+      });
+      data = Array.from(clientMap, ([name, count]) => ({ name, count }));
+    }
+    else if (hierarchyLevel === 'clientType') {
+      const typeMap = new Map();
+      fullRecords.forEach(item => {
+        const count = typeMap.get(item.clientType) || 0;
+        typeMap.set(item.clientType, count + 1);
+      });
+      data = Array.from(typeMap, ([name, count]) => ({ name, count }));
+    }
+    else if (hierarchyLevel === 'month') {
+      const monthMap = new Map();
+      fullRecords.forEach(item => {
+        const count = monthMap.get(item.month) || 0;
+        monthMap.set(item.month, count + 1);
+      });
+      data = Array.from(monthMap, ([name, count]) => ({ name, count }));
+    }
+    else if (hierarchyLevel === 'year') {
+      const yearMap = new Map();
+      fullRecords.forEach(item => {
+        const count = yearMap.get(item.year) || 0;
+        yearMap.set(item.year, count + 1);
+      });
+      data = Array.from(yearMap, ([name, count]) => ({ name, count }));
     }
 
-    // Format aggregated data
-    const formattedData = aggregatedData.map(item => ({
-      ...item,
-      name: item._id || item.name,
-      _id: undefined
-    }));
+    console.log('Aggregated data:', data);
 
     return res.json({ 
       success: true,
-      data: formattedData,
+      data,
       records: fullRecords,
       hierarchyLevel
     });
@@ -334,7 +198,8 @@ exports.getCaseDetails = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch case details',
-      error: error.message 
+      error: error.message,
+      query: req.query
     });
   }
 };
@@ -369,75 +234,106 @@ exports.getCaseDetails = async (req, res) => {
 //     if (clientCode) query.clientCode = clientCode;
 //     if (product) query.product = product;
 
-//     // For downloads, return all matching records
+//     // Get full records for client-side processing
+//     const fullRecords = await KYC.find(query)
+//       .sort({ updatedAt: -1 })
+//       .lean();
+
+//     // For downloads
 //     if (download) {
-//       const cases = await KYC.find(query).lean();
-//       const worksheet = XLSX.utils.json_to_sheet(cases);
+//       const worksheet = XLSX.utils.json_to_sheet(fullRecords);
 //       const workbook = XLSX.utils.book_new();
 //       XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
 //       const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
       
-//       res.setHeader('Content-Disposition', 'attachment; filename="CaseDetails.xlsx"');
+//       res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
 //       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 //       return res.send(buffer);
 //     }
 
-//     // Handle aggregation based on hierarchy level
-//     if (product) {
-//       const cases = await KYC.find(query);
-//       return res.json({ success: true, data: cases, records: cases });
-//     } 
-//     else if (clientCode) {
-//       const products = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$product', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ success: true, data: products, records: await KYC.find(query) });
-//     } 
-//     else if (clientType) {
-//       const clientCodes = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$clientCode', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ success: true, data: clientCodes, records: await KYC.find(query) });
-//     } 
-//     else if (type === 'today') {
-//       const clientTypes = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$clientType', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ success: true, data: clientTypes, records: await KYC.find(query) });
+//     // Return appropriate aggregation based on level
+//     let aggregatedData = [];
+//     const hierarchyLevel = product ? 'productDetails' : 
+//       clientCode ? 'product' : 
+//       clientType ? 'clientCode' : 
+//       type === 'today' || month ? 'clientType' : 
+//       year ? 'month' : 'year';
+
+//     switch(hierarchyLevel) {
+//       case 'productDetails':
+//         aggregatedData = fullRecords;
+//         break;
+//       case 'product':
+//         aggregatedData = await KYC.aggregate([
+//           { $match: query },
+//           { $group: { 
+//             _id: '$product',
+//             count: { $sum: 1 },
+//             clientCode: { $first: '$clientCode' }
+//           }}
+//         ]);
+//         break;
+//       case 'clientCode':
+//         aggregatedData = await KYC.aggregate([
+//           { $match: query },
+//           { $group: { 
+//             _id: '$clientCode',
+//             count: { $sum: 1 },
+//             clientType: { $first: '$clientType' }
+//           }}
+//         ]);
+//         break;
+//       case 'clientType':
+//         aggregatedData = await KYC.aggregate([
+//           { $match: query },
+//           { $group: { 
+//             _id: '$clientType',
+//             count: { $sum: 1 }
+//           }}
+//         ]);
+//         break;
+//       case 'month':
+//         aggregatedData = await KYC.aggregate([
+//           { $match: query },
+//           { $group: { 
+//             _id: '$month',
+//             count: { $sum: 1 },
+//             year: { $first: '$year' }
+//           }}
+//         ]);
+//         break;
+//       case 'year':
+//         aggregatedData = await KYC.aggregate([
+//           { $match: query },
+//           { $group: { 
+//             _id: '$year',
+//             count: { $sum: 1 }
+//           }}
+//         ]);
+//         break;
 //     }
-//     else if (month) {
-//       const clientTypes = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$clientType', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ success: true, data: clientTypes, records: await KYC.find(query) });
-//     }
-//     else if (year) {
-//       const months = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$month', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ success: true, data: months, records: await KYC.find(query) });
-//     }
-//     else {
-//       const years = await KYC.aggregate([
-//         { $match: query },
-//         { $group: { _id: '$year', count: { $sum: 1 } } },
-//         { $project: { name: '$_id', count: 1, _id: 0 } }
-//       ]);
-//       return res.json({ success: true, data: years, records: await KYC.find(query) });
-//     }
+
+//     // Format aggregated data
+//     const formattedData = aggregatedData.map(item => ({
+//       ...item,
+//       name: item._id || item.name,
+//       _id: undefined
+//     }));
+
+//     return res.json({ 
+//       success: true,
+//       data: formattedData,
+//       records: fullRecords,
+//       hierarchyLevel
+//     });
+
 //   } catch (error) {
-//     console.error('Error fetching case details:', error);
-//     res.status(500).json({ success: false, message: 'Server error' });
+//     console.error('Error in getCaseDetails:', error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: 'Failed to fetch case details',
+//       error: error.message 
+//     });
 //   }
 // };
 // Manual update trigger with role enforcement

@@ -25,12 +25,14 @@ const trackerSchema = new mongoose.Schema({
     productType: { type: String, default: "" },
     listByEmployee: { type: String, default: "" },
     dateOut: { type: String, default: "" },
+    dateOutInDay: { type: String, default: "" },
     sentBy: { type: String, default: "" },
     autoOrManual: { type: String, default: "manual" },
     caseDoneBy: { type: String, default: "" },
     clientTAT: { type: String, default: "" },
     customerCare: { type: String, default: "" },
     sentDate: { type: String, default: "" },
+    sentDateInDay: { type: String, default: "" },
     clientType: { type: String, default: "" },
     dedupBy: { type: String, default: "" },
     vendorRate: { type: Number, default:"" },
@@ -43,6 +45,8 @@ const trackerSchema = new mongoose.Schema({
     year: { type: String }, // Add year field
     month: { type: String }, // Add month field
     role: { type: String, enum: ["admin", "employee", "client"]},
+    n: { type: String },
+
     attachments: [{
         caseId:String,
         filename: String,

@@ -1,5 +1,5 @@
 const KYC = require("../models/kycModel");
-const moment = require("moment");
+const moment = require('moment-timezone');
 
 
 // Role-based cache with TTL
@@ -8,7 +8,7 @@ const CACHE_TTL = 5000; // Reduced from 30s to 5s for more frequent updates
 
 
 const getFormattedDateTime = () => {
-  return moment().format("DD-MM-YYYY, hh:mm:ss A");
+  return moment().tz("Asia/Kolkata").format("DD-MM-YYYY, hh:mm:ss A");
 };
 
 async function getVerificationTrendsData(query = {}, role, user) {
