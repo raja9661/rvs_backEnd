@@ -79,7 +79,7 @@ exports.getCaseDetails = async (req, res) => {
     
     // 1. Base query with role enforcement and debug logging
     let query = role === 'admin' ? {} : { listByEmployee: user };
-    console.log('Initial query:', JSON.stringify(query));
+    // console.log('Initial query:', JSON.stringify(query));
 
     // 2. Handle today cases with proper date range
     if (type === 'today') {
@@ -111,11 +111,11 @@ exports.getCaseDetails = async (req, res) => {
     if (clientCode) query.clientCode = clientCode;
     if (product) query.product = product;
 
-    console.log('Final query:', JSON.stringify(query));
+    // console.log('Final query:', JSON.stringify(query));
 
     // 6. Get full records with debug
     const fullRecords = await KYC.find(query).lean();
-    console.log(`Found ${fullRecords.length} records`);
+    // console.log(`Found ${fullRecords.length} records`);
 
         if (download) {
       const worksheet = XLSX.utils.json_to_sheet(fullRecords);
@@ -135,7 +135,7 @@ exports.getCaseDetails = async (req, res) => {
       type === 'today' || month ? 'clientType' : 
       year ? 'month' : 'year';
 
-    console.log('Hierarchy level:', hierarchyLevel);
+    // console.log('Hierarchy level:', hierarchyLevel);
 
     // 8. Return aggregated data for navigation
     let data = [];
@@ -184,7 +184,7 @@ exports.getCaseDetails = async (req, res) => {
       data = Array.from(yearMap, ([name, count]) => ({ name, count }));
     }
 
-    console.log('Aggregated data:', data);
+    // console.log('Aggregated data:', data);
 
     return res.json({ 
       success: true,
