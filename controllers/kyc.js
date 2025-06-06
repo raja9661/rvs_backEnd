@@ -1123,10 +1123,7 @@ const FIELD_ORDERS = {
 exports.getTrackerData = async (req, res) => {
   try {
     const { role, userId, name } = req.query;
-    console.log("Requested Role:", role);
-    console.log("userId:", userId);
-    console.log("name:", name);
-
+    
     let projection = {};
 
     if (role === "admin") {
