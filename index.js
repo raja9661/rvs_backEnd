@@ -32,7 +32,9 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:8080', 
   'https://www.rvsdoc.com',
-  'http://13.126.216.112:5173'
+  'http://13.126.216.112:5173',
+  'http://127.0.0.1:8080'
+  
 ];
 
 app.use(cors({
