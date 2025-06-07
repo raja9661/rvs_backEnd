@@ -79,11 +79,9 @@ app.get('*', (req, res) => {
 connectdb();
 
 
-const port = process.env.PORT || 8080;
-// server.listen(port, () => {
-//   console.log(`🚀 Server is Running on Port: ${port}`);
-// });
-app.listen(port, '0.0.0.0', () => console.log("Server running on port 8080"));
+app.listen(process.env.PORT || 8080, '0.0.0.0', () => {
+  console.log("Server running on 0.0.0.0:8080");
+});
 
 
 // const express = require('express')
