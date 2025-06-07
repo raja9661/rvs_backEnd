@@ -1,3 +1,5 @@
+#
+
 name: Deploy Node Application
 
 on:
@@ -28,8 +30,36 @@ jobs:
     needs: build
     runs-on: self-hosted
     steps:
-      - name: Clean Image
-        run: docker system prune -af
+      - name: Check Initial Disk Usage
+        run: df -h
+
+      - name: Comprehensive System Cleanup
+        run: |
+          # Stop and remove all containers
+          docker stop $(docker ps -aq) || true
+          docker rm $(docker ps -aq) || true
+
+          # Remove all images, networks, volumes, and build cache
+          docker system prune -af --volumes
+
+          # Clean up npm cache
+          sudo rm -rf /root/.npm/_cacache
+          sudo rm -rf ~/.npm/_cacache
+
+          # Clean up Docker build cache specifically
+          docker builder prune -af
+
+          # Remove unused Docker images more aggressively
+          docker image prune -af
+
+          # Clean up system logs if needed
+          sudo journalctl --vacuum-time=1d || true
+
+          # Clean up temporary files
+          sudo rm -rf /tmp/* || true
+
+          echo "Cleanup completed. Current disk usage:"
+          df -h
 
       - name: Pull image from Docker Hub
         run: docker pull raja9661/rvs_backend:latest
@@ -41,4 +71,19 @@ jobs:
         continue-on-error: true
 
       - name: Run Docker Container
-        run: docker run -d --name nodejs-container -p 8080:8080 -e MONGO_URL="${{ secrets.MONGO_URL }}"  -e PORT="${{ secrets.PORT }}" -e EMAIL="${{ secrets.EMAIL }}" -e PASSWORD="${{ secrets.PASSWORD }}" -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" -e AWS_REGION="${{ secrets.AWS_REGION }}" -e AWS_BUCKET_NAME="${{ secrets.AWS_BUCKET_NAME }}"  -e DOCKER_USER="${{ secrets.DOCKER_USER }}" -e DOCKER_PASS="${{ secrets.DOCKER_PASS }}" -e JWT_SECRET="${{ secrets.JWT_SECRET }}" raja9661/rvs_backend:latest
+        run: |
+          docker run -d \
+            --name nodejs-container \
+            -p 8080:8080 \
+            -e MONGO_URL="${{ secrets.MONGO_URL }}" \
+            -e PORT="${{ secrets.PORT }}" \
+            -e EMAIL="${{ secrets.EMAIL }}" \
+            -e PASSWORD="${{ secrets.PASSWORD }}" \
+            -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+            -e AWS_REGION="${{ secrets.AWS_REGION }}" \
+            -e AWS_BUCKET_NAME="${{ secrets.AWS_BUCKET_NAME }}" \
+            -e DOCKER_USER="${{ secrets.DOCKER_USER }}" \
+            -e DOCKER_PASS="${{ secrets.DOCKER_PASS }}" \
+            -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+            raja9661/rvs_backend:latest
