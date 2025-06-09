@@ -35,10 +35,6 @@ jobs:
 
       - name: Comprehensive System Cleanup
         run: |
-          # Stop and remove all containers
-          docker stop $(docker ps -aq) || true
-          docker rm $(docker ps -aq) || true
-
           # Remove all images, networks, volumes, and build cache
           docker system prune -af --volumes
 
