@@ -3196,13 +3196,16 @@ exports.batchUpdate = async (req, res) => {
       if ((updates.status === "Closed" || updates.vendorStatus === "Closed")) {
         update.dateOut = getFormattedDateTime();
         update.dateOutInDay = getFormattedDateDay();
+        console.log("date-Out:",update.dateOut)
         
         // Calculate TAT based on sentDate if available, otherwise dateIn
         const startDate = caseDoc.sentDate ? parseCustomDateTime(caseDoc.sentDate) : 
                           caseDoc.dateIn ? parseCustomDateTime(caseDoc.dateIn) : null;
+        console.log("startDate:",startDate)                  
         
         if (startDate) {
           update.clientTAT = calculateTAT(startDate, now);
+          console.log("update.clientTAT:",update.clientTAT)    
         }
       }
 

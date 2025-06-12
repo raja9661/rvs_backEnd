@@ -316,6 +316,71 @@ exports.getClientCodes = async (req, res) => {
 
 ///////////////////****Vendor-Management *****////////////////  
 
+// exports.getVendorsByType = async (req, res) => {
+//   const { type } = req.params;
+//   try {
+//     const vendors = await Vendor.find({ vendorType: type });
+//     res.json(vendors);
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+exports.getVendorsByType = async (req, res) => {
+     
+    const { type } = req.params;
+    const { page = 1, limit = 10, search = '' } = req.query;
+
+    try {
+        const query = {
+            vendorType: type,
+            vendorName: { $regex: search, $options: 'i' } // case-insensitive search
+        };
+
+        const vendors = await Vendor.find(query)
+            .limit(limit * 1)
+            .skip((page - 1) * limit)
+            .exec();
+
+        const count = await Vendor.countDocuments(query);
+
+        res.json({
+            vendors,
+            totalPages: Math.ceil(count / limit),
+            currentPage: parseInt(page)
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+exports.getAllVendors = async (req, res) => {
+  const { page = 1, limit = 10, search = '' } = req.query;
+  
+  try {
+    const query = {
+      $or: [
+        { vendorName: { $regex: search, $options: 'i' } },
+        { productName: { $regex: search, $options: 'i' } }
+      ]
+    };
+    
+    const vendors = await Vendor.find(query)
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .exec();
+
+    const count = await Vendor.countDocuments(query);
+
+    res.json({
+      vendors,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 exports.getVendors = async (req, res) => {
     try {
         const vendors = await User.find({role:"vendor"});
@@ -334,40 +399,68 @@ exports.getProductsforvandor = async (req, res) => {
     }
 };
 
+// exports.addVendorProducts = async (req, res) => {
+//     const { vendorName, products } = req.body;
+
+//     try {
+//         // Check if the vendor already exists
+//         const existingVendor = await Vendor.findOne({ vendorName });
+
+//         if (existingVendor) {
+//             // Vendor exists, update its productName array
+//             const existingProducts = existingVendor.productName;
+
+//             // Filter out products that are already assigned to the vendor
+//             const newProducts = products.filter(
+//                 (product) => !existingProducts.includes(product)
+//             );
+
+//             if (newProducts.length > 0) {
+//                 // Add only new products to the vendor's productName array
+//                 existingVendor.productName = [...existingProducts, ...newProducts];
+//                 await existingVendor.save();
+//                 res.status(200).json(existingVendor);
+//             } else {
+//                 // No new products to add
+//                 res.status(200).json({ message: "All products already assigned to the vendor." });
+//             }
+//         } else {
+//             // Vendor does not exist, create a new vendor entry
+//             const vendorProduct = new Vendor({ vendorName, productName: products });
+//             await vendorProduct.save();
+//             res.status(201).json(vendorProduct);
+//         }
+//     } catch (err) {
+//         res.status(400).json({ message: err.message });
+//     }
+// };
 exports.addVendorProducts = async (req, res) => {
-    const { vendorName, products } = req.body;
+  const { vendorName, products, vendorType = 'other' } = req.body;
 
-    try {
-        // Check if the vendor already exists
-        const existingVendor = await Vendor.findOne({ vendorName });
+  try {
+    const existingVendor = await Vendor.findOne({ vendorName, vendorType });
 
-        if (existingVendor) {
-            // Vendor exists, update its productName array
-            const existingProducts = existingVendor.productName;
+    if (existingVendor) {
+      const existingProducts = existingVendor.productName;
+      const newProducts = products.filter(
+        product => !existingProducts.includes(product)
+      );
 
-            // Filter out products that are already assigned to the vendor
-            const newProducts = products.filter(
-                (product) => !existingProducts.includes(product)
-            );
-
-            if (newProducts.length > 0) {
-                // Add only new products to the vendor's productName array
-                existingVendor.productName = [...existingProducts, ...newProducts];
-                await existingVendor.save();
-                res.status(200).json(existingVendor);
-            } else {
-                // No new products to add
-                res.status(200).json({ message: "All products already assigned to the vendor." });
-            }
-        } else {
-            // Vendor does not exist, create a new vendor entry
-            const vendorProduct = new Vendor({ vendorName, productName: products });
-            await vendorProduct.save();
-            res.status(201).json(vendorProduct);
-        }
-    } catch (err) {
-        res.status(400).json({ message: err.message });
+      if (newProducts.length > 0) {
+        existingVendor.productName = [...existingProducts, ...newProducts];
+        await existingVendor.save();
+        res.status(200).json(existingVendor);
+      } else {
+        res.status(200).json({ message: "All products already assigned to the vendor." });
+      }
+    } else {
+      const vendorProduct = new Vendor({ vendorName, productName: products, vendorType });
+      await vendorProduct.save();
+      res.status(201).json(vendorProduct);
     }
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
 };
 
 exports.getVendorProducts = async (req, res) => {
@@ -390,10 +483,9 @@ exports.getVendorProducts = async (req, res) => {
     }
 };
 exports.getVendorName = async (req, res) => {
-  console.log("hello")
+   
     try {
-        const vendorName = await Vendor.find()
-        // console.log(vendorName)
+        const vendorName = await Vendor.find({});
         res.json({
             vendorName
         });

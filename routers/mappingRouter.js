@@ -18,7 +18,9 @@ const {
     removeProductFromVendor,
     getVendors,
     getProductsforvandor,
-    getClientCodes
+    getClientCodes,
+    getVendorsByType,
+    getAllVendors
 } = require("../controllers/MappingController")
 
 
@@ -36,6 +38,7 @@ router.post("/addClientCode",addClientCode);
 router.delete("/removeClientCode",removeClientCode);
 
 router.get("/getVendors",getVendors)
+router.get("/getAllVendors",getAllVendors)
 router.get("/getProducts",getProductsforvandor)
 router.get("/getVendorName",getVendorName)
 router.get("/getVendorProducts",getVendorProducts)
@@ -43,6 +46,7 @@ router.post("/addVendor",addVendorProducts)
 router.put('/updateVendorProducts/:id', updateVendorProducts);
 router.delete('/deleteVendorProducts/:id', deleteVendorProducts);
 router.delete("/:vendorId/product/:productName", removeProductFromVendor);
+router.get('/type/:type', getVendorsByType);
 
 
 module.exports = router;

@@ -16,9 +16,20 @@ const clientCodeSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Vendor Product Schema
+// const defaultVendorSchema = new mongoose.Schema({
+//   productName: [{ type: String, required: true }], // Array of product names
+//   vendorName: { type: String, required: true }
+// }, { timestamps: true });
+
 const defaultVendorSchema = new mongoose.Schema({
-  productName: [{ type: String, required: true }], // Array of product names
-  vendorName: { type: String, required: true }
+  productName: [{ type: String, required: true }],
+  vendorName: { type: String, required: true },
+  vendorType: { 
+    type: String, 
+    required: true,
+    enum: ['default', 'other'],
+    default: 'other'
+  }
 }, { timestamps: true });
 
 // Export all models
