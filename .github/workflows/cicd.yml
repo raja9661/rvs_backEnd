@@ -36,6 +36,7 @@ jobs:
       - name: Comprehensive System Cleanup
         run: |
           # Remove all images, networks, volumes, and build cache
+          docker rm $(docker ps -aq) || true
           docker system prune -af --volumes
 
           # Clean up npm cache
