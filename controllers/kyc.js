@@ -289,7 +289,7 @@ exports.singleUpload = async (req, res) => {
       listByEmployee: empName,
       clientType: getClientType(userclientcode),
       vendorName: vandorname,
-      createdAt: currentDate,
+      createdAt: getFormattedDateTime(),
       customerCare,
       NameUploadBy,
       ipAddress
@@ -1089,8 +1089,6 @@ const FIELD_ORDERS = {
     'sentDateInDay',
     'clientType',
     'dedupBy',
-    'createdAt',
-    'updatedAt'
   ],
   client: [
     'caseId',
@@ -1215,8 +1213,6 @@ exports.getTrackerData = async (req, res) => {
         sentDateInDay: 1,
         clientType: 1,
         dedupBy: 1,
-        createdAt: 1,
-        updatedAt: 1,
       };
 
       const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
@@ -1331,81 +1327,6 @@ exports.singleTrackerData = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to fetch data" });
   }
 };
-// exports.updateTrackerData = async (req, res) => {
-//   try {
-//     const updates = req.body.updatedData;
-//     console.log("Received updates:", updates);
-    
-
-//     // Validate input
-//     if (!Array.isArray(updates)) {
-//       return res
-//         .status(400)
-//         .json({
-//           success: false,
-//           message: "Invalid input: expected an array of updates",
-//         });
-//     }
-
-//     // Use Promise.all for parallel updates
-//     const updatePromises = updates.map(async (update) => {
-//       const { caseId, ...updateData } = update;
-
-//       // Validate the update object
-//       if (!caseId) {
-//         throw new Error(
-//           `Invalid update object: Missing caseId in ${JSON.stringify(update)}`
-//         );
-//       }
-
-//       if (!Object.keys(updateData).length) {
-//         throw new Error(
-//           `Invalid update object: No fields to update in ${JSON.stringify(
-//             update
-//           )}`
-//         );
-//       }
-
-//       // Update the document in the database
-//       const updatedDocument = await KYC.findOneAndUpdate(
-//         { caseId }, // Find the document by caseId
-//         updateData, // Update with the new data
-//         { new: true } // Return the updated document
-//       );
-
-//       if (!updatedDocument) {
-//         throw new Error(`Document with caseId ${caseId} not found`);
-//       }
-
-//       console.log("Updated Document:", updatedDocument);
-//       return updatedDocument;
-//     });
-
-//     // Execute all updates in parallel
-//     const updatedDocuments = await Promise.all(updatePromises);
-
-//     // Check if all updates were successful
-//     if (updatedDocuments.some((doc) => !doc)) {
-//       return res
-//         .status(404)
-//         .json({
-//           success: false,
-//           message: "Some documents could not be found or updated",
-//         });
-//     }
-
-//     res.json({
-//       success: true,
-//       message: "Data updated successfully",
-//       updatedDocuments,
-//     });
-//   } catch (error) {
-//     console.error("Update Error:", error);
-//     res
-//       .status(500)
-//       .json({ success: false, message: "Update failed", error: error.message });
-//   }
-// };
 
 exports.updateTrackerData = async (req, res) => {
   try {
@@ -1431,10 +1352,26 @@ exports.updateTrackerData = async (req, res) => {
         throw new Error("User information missing in update");
       }
 
+      // Validate vendor name if updating vendorName field
+      if (changedField === 'vendorName') {
+        const vendorExists = await Vendor.exists({ vendorName: newValue });
+        if (!vendorExists) {
+          throw new Error(`Vendor '${newValue}' not found in database`);
+        }
+      }
+
+      // Validate employee name if updating listByEmployee field
+      if (changedField === 'listByEmployee') {
+        const employeeExists = await ClientCode.exists({ EmployeeName: newValue });
+        if (!employeeExists) {
+          throw new Error(`Employee '${newValue}' not found in database`);
+        }
+      }
+
       // Prepare update payload
       const updatePayload = {
         [changedField]: newValue,
-        updatedAt: new Date(),
+        updatedAt: getFormattedDateTime(),
         updatedBy: userName,
         updatedById: userId
       };
@@ -1479,12 +1416,92 @@ exports.updateTrackerData = async (req, res) => {
 
   } catch (error) {
     console.error("Update Error:", error);
-    res.status(500).json({
+    res.status(400).json({ // Changed to 400 for client errors
       success: false,
-      message: error.message
+      message: error.message,
+      field: error.message.includes('Vendor') ? 'vendorName' : 
+             error.message.includes('Employee') ? 'listByEmployee' : undefined
     });
   }
 };
+// exports.updateTrackerData = async (req, res) => {
+//   try {
+//     const { updatedData } = req.body;
+
+//     if (!Array.isArray(updatedData)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Expected array of updates"
+//       });
+//     }
+
+//     const results = await Promise.all(updatedData.map(async (update) => {
+//       // Validate required fields
+//       const { caseId, changedField, userId, userName } = update;
+//       const newValue = update[changedField];
+      
+//       if (!caseId || !changedField || newValue === undefined) {
+//         throw new Error(`Invalid update format: ${JSON.stringify(update)}`);
+//       }
+
+//       if (!userId || !userName) {
+//         throw new Error("User information missing in update");
+//       }
+
+//       // Prepare update payload
+//       const updatePayload = {
+//         [changedField]: newValue,
+//         updatedAt: new Date(),
+//         updatedBy: userName,
+//         updatedById: userId
+//       };
+
+//       // Special field handling
+//       if (changedField === 'status' && newValue === "Closed") {
+//         updatePayload.dateOut = getFormattedDateTime();
+//         updatePayload.caseDoneBy = userName;
+        
+//         const doc = await KYC.findOne({ caseId });
+//         if (doc?.dateIn) {
+//           updatePayload.clientTAT = calculateTAT(
+//             parseCustomDateTime(doc.dateIn),
+//             updatePayload.dateOut
+//           );
+//         }
+//       }
+
+//       if (changedField === 'caseStatus' && newValue === "Sent") {
+//         updatePayload.sentDate = getFormattedDateTime();
+//         updatePayload.sentBy = userName;
+//       }
+
+//       // Apply update
+//       const updatedDoc = await KYC.findOneAndUpdate(
+//         { caseId },
+//         { $set: updatePayload },
+//         { new: true, runValidators: true }
+//       );
+
+//       if (!updatedDoc) {
+//         throw new Error(`Case ${caseId} not found`);
+//       }
+
+//       return updatedDoc;
+//     }));
+
+//     res.json({
+//       success: true,
+//       updatedDocuments: results
+//     });
+
+//   } catch (error) {
+//     console.error("Update Error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+//   }
+// };
 
 // Helper functions
 async function handleStatusClosed(caseId, updatePayload, user) {
@@ -3173,6 +3190,7 @@ exports.similarRecords = async (req, res) => {
 exports.batchUpdate = async (req, res) => {
   try {
     const { caseIds, updates } = req.body;
+    console.log("updates:",updates)
     
     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
       return res.status(400).json({ success: false, message: "Invalid caseIds" });
@@ -3190,28 +3208,23 @@ exports.batchUpdate = async (req, res) => {
 
     const now = new Date();
     const bulkOps = cases.map(caseDoc => {
-      const update = { ...updates, updatedAt: now };
+      const update = { ...updates, updatedAt: getFormattedDateTime()};
       
       // Handle Closed status
       if ((updates.status === "Closed" || updates.vendorStatus === "Closed")) {
-        update.dateOut = getFormattedDateTime();
-        update.dateOutInDay = getFormattedDateDay();
-        console.log("date-Out:",update.dateOut)
-        
         // Calculate TAT based on sentDate if available, otherwise dateIn
-        const startDate = caseDoc.sentDate ? parseCustomDateTime(caseDoc.sentDate) : 
-                          caseDoc.dateIn ? parseCustomDateTime(caseDoc.dateIn) : null;
-        console.log("startDate:",startDate)                  
-        
-        if (startDate) {
-          update.clientTAT = calculateTAT(startDate, now);
+        const startDate = caseDoc.sentDate ? parseCustomDateTime(caseDoc.sentDate) : null;
+        const endDate = moment().toISOString();
+        console.log("startDate:",startDate)                                
+        console.log("endDate:",endDate)
+        if (startDate && endDate) {
+          update.clientTAT = calculateTAT(startDate, endDate);
           console.log("update.clientTAT:",update.clientTAT)    
         }
       }
 
       // Handle Sent status
       if (updates.caseStatus === "Sent") {
-        update.sentDateInDay = getFormattedDateDay();
         if (!updates.sentBy) update.sentBy = "System";
         if (!updates.sentDate) update.sentDate = now;
       }
@@ -3225,6 +3238,7 @@ exports.batchUpdate = async (req, res) => {
     });
 
     const result = await KYC.bulkWrite(bulkOps);
+    console.log("result:",result)
     const updatedCount = result.modifiedCount || result.nModified || 0;
 
     res.json({
@@ -3241,66 +3255,3 @@ exports.batchUpdate = async (req, res) => {
     });
   }
 };
-// exports.batchUpdate = async (req, res) => {
-//   try {
-//     const { caseIds, updates } = req.body;
-    
-//     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
-//       return res.status(400).json({ success: false, message: "Invalid caseIds" });
-//     }
-    
-//     if (!updates || typeof updates !== 'object') {
-//       return res.status(400).json({ success: false, message: "Invalid updates" });
-//     }
-
-//     // Prepare the update payload
-//     const updatePayload = {
-//       ...updates,
-//       updatedAt: new Date()
-//     };
-//    console.log("updates",updates)
-//     // Handle Closed status
-//     if ((updates.status === "Closed" || updates.vendorStatus === "Closed") && !updates.dateOut) {
-//       updatePayload.dateOut = new Date();
-      
-//       // Calculate TAT if dateIn exists
-//       const docs = await KYC.find({ caseId: { $in: caseIds } });
-//       if (docs.length > 0 && docs[0].dateIn) {
-//         updatePayload.clientTAT = calculateTAT(
-//           parseCustomDateTime(docs[0].dateIn),
-//           updatePayload.dateOut
-//         );
-//       }
-//     }
-
-//     // Handle Sent caseStatus
-//     if (updates.caseStatus === "Sent") {
-//       if (!updates.sentBy) {
-//         updatePayload.sentBy = "System";
-//       }
-//       if (!updates.sentDate) {
-//         updatePayload.sentDate = new Date();
-//       }
-//     }
-
-//     const result = await KYC.updateMany(
-//       { caseId: { $in: caseIds } },
-//       { $set: updatePayload }
-//     );
-
-//     const updatedCount = result.modifiedCount || result.nModified || 0;
-
-//     res.json({
-//       success: true,
-//       message: `Updated ${updatedCount} records`,
-//       updatedCount: updatedCount
-//     });
-//   } catch (error) {
-//     console.error("Batch update error:", error);
-//     res.status(500).json({ 
-//       success: false, 
-//       message: "Batch update failed", 
-//       error: error.message 
-//     });
-//   }
-// };

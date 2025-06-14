@@ -40,7 +40,7 @@ exports.addSingle = async (req, res) => {
 
 // Add multiple products
 exports.addMultiple = async (req, res) => {
-  const products = req.body;
+  const {products} = req.body;
 
   try {
     const savedProducts = [];

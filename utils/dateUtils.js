@@ -42,8 +42,12 @@ const parseCustomDateTime = (dateStr) => {
 };
 
 const calculateTAT = (startStr, endStr) => {
+  console.log("start date:",startStr)
+  console.log("endStr date:",endStr)
   const start = parseCustomDateTime(startStr);
   const end = parseCustomDateTime(endStr);
+  console.log("start:",start)
+  console.log("end:",end)
   
   if (!start || !end) return 'N/A';
   if (end < start) return 'Invalid Date Range';
