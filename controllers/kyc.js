@@ -289,7 +289,7 @@ exports.singleUpload = async (req, res) => {
       listByEmployee: empName,
       clientType: getClientType(userclientcode),
       vendorName: vandorname,
-      createdAt: getFormattedDateTime(),
+      // createdAt: getFormattedDateTime(),
       customerCare,
       NameUploadBy,
       ipAddress
@@ -3138,7 +3138,7 @@ exports.similarRecords = async (req, res) => {
     const { statusFilter, caseStatusFilter, applyFilters, filters } = req.body;
     console.log("hello")
     
-    // Base query
+    // Base quezry
     let query = {
       $or: [
         { status: { $in: statusFilter } },
@@ -3192,7 +3192,6 @@ exports.similarRecords = async (req, res) => {
 exports.batchUpdate = async (req, res) => {
   try {
     const { caseIds, updates } = req.body;
-    console.log("updates:",updates)
     
     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
       return res.status(400).json({ success: false, message: "Invalid caseIds" });
@@ -3202,51 +3201,66 @@ exports.batchUpdate = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid updates" });
     }
 
-    // First get all cases to calculate TAT properly
+    // First get all cases to check for changes
     const cases = await KYC.find({ caseId: { $in: caseIds } });
     if (cases.length === 0) {
       return res.status(404).json({ success: false, message: "No cases found" });
     }
 
     const now = new Date();
-    const bulkOps = cases.map(caseDoc => {
-      const update = { ...updates, updatedAt: getFormattedDateTime()};
-      
-      // Handle Closed status
-      if ((updates.status === "Closed" || updates.vendorStatus === "Closed")) {
-        // Calculate TAT based on sentDate if available, otherwise dateIn
-        const startDate = caseDoc.sentDate ? parseCustomDateTime(caseDoc.sentDate) : null;
-        const endDate = moment().toISOString();
-        console.log("startDate:",startDate)                                
-        console.log("endDate:",endDate)
-        if (startDate && endDate) {
-          update.clientTAT = calculateTAT(startDate, endDate);
-          console.log("update.clientTAT:",update.clientTAT)    
+    let updatedCount = 0;
+    let clientTATUpdates = 0;
+    const errors = [];
+
+    // Process each case individually for better tracking
+    for (const caseDoc of cases) {
+      try {
+        const update = { ...updates, updatedAt: getFormattedDateTime() };
+        let shouldUpdate = false;
+
+        // Check if any field actually changes
+        for (const [key, value] of Object.entries(updates)) {
+          if (caseDoc[key] !== value) {
+            shouldUpdate = true;
+            break;
+          }
         }
-      }
 
-      // Handle Sent status
-      if (updates.caseStatus === "Sent") {
-        if (!updates.sentBy) update.sentBy = "System";
-        if (!updates.sentDate) update.sentDate = now;
-      }
+        if (!shouldUpdate) continue;
 
-      return {
-        updateOne: {
-          filter: { _id: caseDoc._id },
-          update: { $set: update }
+        // Handle Closed status
+        if ((updates.status === "Closed" || updates.vendorStatus === "Closed")) {
+          const startDate = caseDoc.sentDate ? parseCustomDateTime(caseDoc.sentDate) : null;
+          const endDate = moment().toISOString();;
+
+          if (startDate && endDate) {
+            const tat = calculateTAT(startDate, endDate);
+            if (tat !== 'N/A' && tat !== 'Invalid Date Range') {
+              update.clientTAT = tat;
+              clientTATUpdates++;
+            }
+          }
         }
-      };
-    });
 
-    const result = await KYC.bulkWrite(bulkOps);
-    console.log("result:",result)
-    const updatedCount = result.modifiedCount || result.nModified || 0;
+        // Handle Sent status
+        if (updates.caseStatus === "Sent") {
+          if (!updates.sentBy) update.sentBy = "System";
+          if (!updates.sentDate) update.sentDate = getFormattedDateTime();
+        }
+
+        await KYC.updateOne({ _id: caseDoc._id }, { $set: update });
+        updatedCount++;
+      } catch (error) {
+        errors.push(`Failed to update case ${caseDoc.caseId}: ${error.message}`);
+      }
+    }
 
     res.json({
       success: true,
-      message: `Updated ${updatedCount} records`,
-      updatedCount
+      message: `Processed ${cases.length} records`,
+      updatedCount,
+      clientTATUpdates,
+      errors: errors.length > 0 ? errors : undefined
     });
   } catch (error) {
     console.error("Batch update error:", error);
@@ -3257,3 +3271,71 @@ exports.batchUpdate = async (req, res) => {
     });
   }
 };
+// exports.batchUpdate = async (req, res) => {
+//   try {
+//     const { caseIds, updates } = req.body;
+//     console.log("updates:",updates)
+    
+//     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
+//       return res.status(400).json({ success: false, message: "Invalid caseIds" });
+//     }
+    
+//     if (!updates || typeof updates !== 'object') {
+//       return res.status(400).json({ success: false, message: "Invalid updates" });
+//     }
+
+//     // First get all cases to calculate TAT properly
+//     const cases = await KYC.find({ caseId: { $in: caseIds } });
+//     if (cases.length === 0) {
+//       return res.status(404).json({ success: false, message: "No cases found" });
+//     }
+
+//     const now = new Date();
+//     const bulkOps = cases.map(caseDoc => {
+//       const update = { ...updates, updatedAt: getFormattedDateTime()};
+      
+//       // Handle Closed status
+//       if ((updates.status === "Closed" || updates.vendorStatus === "Closed")) {
+//         // Calculate TAT based on sentDate if available, otherwise dateIn
+//         const startDate = caseDoc.sentDate ? parseCustomDateTime(caseDoc.sentDate) : null;
+//         const endDate = moment().toISOString();
+//         console.log("startDate:",startDate)                                
+//         console.log("endDate:",endDate)
+//         if (startDate && endDate) {
+//           update.clientTAT = calculateTAT(startDate, endDate);
+//           console.log("update.clientTAT:",update.clientTAT)    
+//         }
+//       }
+
+//       // Handle Sent status
+//       if (updates.caseStatus === "Sent") {
+//         if (!updates.sentBy) update.sentBy = "System";
+//         if (!updates.sentDate) update.sentDate = now;
+//       }
+
+//       return {
+//         updateOne: {
+//           filter: { _id: caseDoc._id },
+//           update: { $set: update }
+//         }
+//       };
+//     });
+
+//     const result = await KYC.bulkWrite(bulkOps);
+//     console.log("result:",result)
+//     const updatedCount = result.modifiedCount || result.nModified || 0;
+
+//     res.json({
+//       success: true,
+//       message: `Updated ${updatedCount} records`,
+//       updatedCount
+//     });
+//   } catch (error) {
+//     console.error("Batch update error:", error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: "Batch update failed", 
+//       error: error.message 
+//     });
+//   }
+// };
