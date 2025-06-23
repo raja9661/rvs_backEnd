@@ -63,7 +63,7 @@ const allowedOrigins = [
 // Enhanced CORS configuration
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  console.log('Request Origin:', origin); // Debug log
+  // console.log('Request Origin:', origin); // Debug log
   
   if (allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);

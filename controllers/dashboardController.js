@@ -74,7 +74,7 @@ exports.getDashboardData = async (req, res) => {
 
 exports.getCaseDetails = async (req, res) => {
   try {
-    const { type, year, month, clientType, clientCode, product, download } = req.query;
+    const { type, year, month, clientType, clientCode,productType, product, download } = req.query;
     const { role, user } = req.body;
     
     // 1. Base query with role enforcement and debug logging
@@ -108,6 +108,7 @@ exports.getCaseDetails = async (req, res) => {
     
     // 5. Hierarchy filters
     if (clientType) query.clientType = clientType;
+    if (productType) query.productType = productType;
     if (clientCode) query.clientCode = clientCode;
     if (product) query.product = product;
 
@@ -129,11 +130,18 @@ exports.getCaseDetails = async (req, res) => {
     }
 
     // 7. Determine hierarchy level
+    // const hierarchyLevel = product ? 'productDetails' : 
+    //   clientCode ? 'product' : 
+    //   clientType ? 'clientCode' : 
+    //   type === 'today' || month ? 'clientType' : 
+    //   year ? 'month' : 'year';
     const hierarchyLevel = product ? 'productDetails' : 
-      clientCode ? 'product' : 
-      clientType ? 'clientCode' : 
-      type === 'today' || month ? 'clientType' : 
-      year ? 'month' : 'year';
+  clientCode ? 'product' : 
+  productType ? 'clientCode' : 
+  clientType ? 'productType' : 
+  type === 'today' || month ? 'clientType' : 
+  year ? 'month' : 'year';
+
 
     // console.log('Hierarchy level:', hierarchyLevel);
 
@@ -158,7 +166,14 @@ exports.getCaseDetails = async (req, res) => {
         clientMap.set(item.clientCode, count + 1);
       });
       data = Array.from(clientMap, ([name, count]) => ({ name, count }));
-    }
+    }else if (hierarchyLevel === 'productType') {
+  const productTypeMap = new Map();
+  fullRecords.forEach(item => {
+    const count = productTypeMap.get(item.productType) || 0;
+    productTypeMap.set(item.productType, count + 1);
+  });
+  data = Array.from(productTypeMap, ([name, count]) => ({ name, count }));
+}
     else if (hierarchyLevel === 'clientType') {
       const typeMap = new Map();
       fullRecords.forEach(item => {
@@ -203,139 +218,6 @@ exports.getCaseDetails = async (req, res) => {
     });
   }
 };
-// exports.getCaseDetails = async (req, res) => {
-//   try {
-//     const { type, year, month, clientType, clientCode, product, download } = req.query;
-//     const { role, user } = req.body;
-    
-//     let query = role === 'admin' ? {} : { listByEmployee: user };
-    
-//     // Handle today cases
-//     if (type === 'today') {
-//       const today = new Date();
-//       today.setHours(0, 0, 0, 0);
-//       query.createdAt = { $gte: today };
-//     } 
-//     // Handle other types
-//     else if (type === 'New Pending') {
-//       query.caseStatus = 'New Pending';
-//     } else if (type === 'closed') {
-//       query.status = 'Closed';
-//     } else if (type === 'highPriority') {
-//       query.priority = 'High';
-//     }
-    
-//     // Apply hierarchy filters
-//     if (type !== 'today') {
-//       if (year) query.year = year;
-//       if (month) query.month = month;
-//     }
-//     if (clientType) query.clientType = clientType;
-//     if (clientCode) query.clientCode = clientCode;
-//     if (product) query.product = product;
-
-//     // Get full records for client-side processing
-//     const fullRecords = await KYC.find(query)
-//       .sort({ updatedAt: -1 })
-//       .lean();
-
-//     // For downloads
-//     if (download) {
-//       const worksheet = XLSX.utils.json_to_sheet(fullRecords);
-//       const workbook = XLSX.utils.book_new();
-//       XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
-//       const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      
-//       res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
-//       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-//       return res.send(buffer);
-//     }
-
-//     // Return appropriate aggregation based on level
-//     let aggregatedData = [];
-//     const hierarchyLevel = product ? 'productDetails' : 
-//       clientCode ? 'product' : 
-//       clientType ? 'clientCode' : 
-//       type === 'today' || month ? 'clientType' : 
-//       year ? 'month' : 'year';
-
-//     switch(hierarchyLevel) {
-//       case 'productDetails':
-//         aggregatedData = fullRecords;
-//         break;
-//       case 'product':
-//         aggregatedData = await KYC.aggregate([
-//           { $match: query },
-//           { $group: { 
-//             _id: '$product',
-//             count: { $sum: 1 },
-//             clientCode: { $first: '$clientCode' }
-//           }}
-//         ]);
-//         break;
-//       case 'clientCode':
-//         aggregatedData = await KYC.aggregate([
-//           { $match: query },
-//           { $group: { 
-//             _id: '$clientCode',
-//             count: { $sum: 1 },
-//             clientType: { $first: '$clientType' }
-//           }}
-//         ]);
-//         break;
-//       case 'clientType':
-//         aggregatedData = await KYC.aggregate([
-//           { $match: query },
-//           { $group: { 
-//             _id: '$clientType',
-//             count: { $sum: 1 }
-//           }}
-//         ]);
-//         break;
-//       case 'month':
-//         aggregatedData = await KYC.aggregate([
-//           { $match: query },
-//           { $group: { 
-//             _id: '$month',
-//             count: { $sum: 1 },
-//             year: { $first: '$year' }
-//           }}
-//         ]);
-//         break;
-//       case 'year':
-//         aggregatedData = await KYC.aggregate([
-//           { $match: query },
-//           { $group: { 
-//             _id: '$year',
-//             count: { $sum: 1 }
-//           }}
-//         ]);
-//         break;
-//     }
-
-//     // Format aggregated data
-//     const formattedData = aggregatedData.map(item => ({
-//       ...item,
-//       name: item._id || item.name,
-//       _id: undefined
-//     }));
-
-//     return res.json({ 
-//       success: true,
-//       data: formattedData,
-//       records: fullRecords,
-//       hierarchyLevel
-//     });
-
-//   } catch (error) {
-//     console.error('Error in getCaseDetails:', error);
-//     res.status(500).json({ 
-//       success: false, 
-//       message: 'Failed to fetch case details',
-//       error: error.message 
-//     });
-//   }
-// };
 // Manual update trigger with role enforcement
 exports.sendManualUpdate = async (req, res) => {
   try {
