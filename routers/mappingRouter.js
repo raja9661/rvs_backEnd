@@ -20,12 +20,13 @@ const {
     getProductsforvandor,
     getClientCodes,
     getVendorsByType,
-    getAllVendors
+    getAllVendors,
+    getColumns
 } = require("../controllers/MappingController")
 
 
 const router = express.Router();
-
+router.get('/columns', getColumns);
 router.post("/add", addSingle);
 router.post("/add-multiple", addMultiple);
 router.post("/edit/:id", editProduct);

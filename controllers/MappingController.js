@@ -1,5 +1,22 @@
 const {Product,ClientCode,Vendor} = require('../models/MappingItems');
 const User = require("../models/users");
+const KYCdoc = require('../models/kycModel');
+
+
+exports.getColumns = (req, res) => {
+  try {
+    // Extract schema paths and filter out internal fields
+    const allFields = Object.keys(KYCdoc.schema.paths)
+      .filter(field => !['_id', '__v'].includes(field));
+
+    res.json(allFields);
+  } catch (err) {
+    console.error('Error fetching columns:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch columns' });
+  }
+};
+
+
 
 //////////////////*****Product-Managemennt*****///////////////////
 

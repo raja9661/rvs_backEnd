@@ -24,7 +24,7 @@ const {
   sendDashboardUpdates,
   getVerificationTrendsData
 } = require("../utils/dashboardUpdates");
-const { parseCustomDateTime, calculateTAT, formatForFrontend } = require('../utils/dateUtils');
+const { parseCustomDateTime,  formatForFrontend } = require('../utils/dateUtils');
 
 
 
@@ -1089,6 +1089,7 @@ const FIELD_ORDERS = {
     'sentDateInDay',
     'clientType',
     'dedupBy',
+    'isRechecked'
   ],
   client: [
     'caseId',
@@ -1115,7 +1116,8 @@ const FIELD_ORDERS = {
     'sentBy',
     'caseDoneBy',
     'customerCare',
-    'sentDate'
+    'sentDate',
+    'isRechecked'
   ]
 };
 
@@ -1214,6 +1216,7 @@ exports.getTrackerData = async (req, res) => {
         sentDateInDay: 1,
         clientType: 1,
         dedupBy: 1,
+        isRechecked: 1
       };
 
       const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
@@ -1253,6 +1256,7 @@ exports.getTrackerData = async (req, res) => {
         caseDoneBy: 1,
         customerCare: 1,
         sentDate: 1,
+        isRechecked: 1
       };
 
       // Fetch user to check if clientCode exists
@@ -3190,25 +3194,40 @@ exports.similarRecords = async (req, res) => {
 
 // Enhanced batch update with proper TAT calculation
 
+
+
+function calculateTAT(sentDateStr, dateOutStr) {
+  const format = "DD-MM-YYYY, h:mm:ss A";
+  const sent = moment(sentDateStr, format);
+  const out = moment(dateOutStr, format);
+
+  if (!sent.isValid() || !out.isValid() || out.isBefore(sent)) {
+    return "Invalid Date Range";
+  }
+
+  const duration = moment.duration(out.diff(sent));
+  const hours = Math.floor(duration.asHours());
+  const minutes = duration.minutes();
+  const seconds = duration.seconds();
+
+  return `${hours} hours, ${minutes} minutes and ${seconds} seconds`;
+}
+
 exports.batchUpdate = async (req, res) => {
   try {
     const { caseIds, updates } = req.body;
-    
-    // Validate input
+
     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
       return res.status(400).json({ success: false, message: "Invalid caseIds" });
     }
-    
+
     if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
       return res.status(400).json({ success: false, message: "Invalid updates" });
     }
 
-    // Normalize and deduplicate caseIds
     const uniqueCaseIds = [...new Set(caseIds.map(id => String(id).trim()).filter(Boolean))];
-    
-    // Get all cases in a single query
     const cases = await KYC.find({ caseId: { $in: uniqueCaseIds } });
-    
+
     if (cases.length === 0) {
       return res.status(404).json({ success: false, message: "No cases found" });
     }
@@ -3218,13 +3237,11 @@ exports.batchUpdate = async (req, res) => {
     const errors = [];
     const updatedCaseIds = [];
 
-    // Process each case
     for (const caseDoc of cases) {
       try {
-        // Check for actual changes
         const updateFields = {};
         let hasChanges = false;
-        
+
         for (const [key, value] of Object.entries(updates)) {
           if (caseDoc[key] !== value) {
             hasChanges = true;
@@ -3234,40 +3251,37 @@ exports.batchUpdate = async (req, res) => {
 
         if (!hasChanges) continue;
 
-        // Add metadata
         updateFields.updatedAt = getFormattedDateTime();
 
-        // Handle Closed status
-        if ((updates.status === "Closed" || updates.vendorStatus === "Closed")) {
-          const startDate = caseDoc.sentDate ? parseCustomDateTime(caseDoc.sentDate) : null;
-          const endDate = moment().toISOString();
-
-          if (startDate && endDate) {
-            const tat = calculateTAT(startDate, endDate);
-            if (tat !== 'N/A' && tat !== 'Invalid Date Range') {
-              updateFields.clientTAT = tat;
-              clientTATUpdates++;
-            }
-          }
-        }
-
-        // Handle Sent status
+        // Handle caseStatus = Sent
         if (updates.caseStatus === "Sent") {
           if (!updates.sentBy) updateFields.sentBy = "System";
           if (!updates.sentDate) updateFields.sentDate = getFormattedDateTime();
         }
 
-        // Perform update
+        // ✅ Calculate clientTAT if both sentDate and dateOut are available
+        const sentDate = updates.sentDate || caseDoc.sentDate;
+        const dateOut = updates.dateOut || caseDoc.dateOut;
+
+        if (sentDate && dateOut) {
+          const tat = calculateTAT(sentDate, dateOut);
+          if (tat !== "Invalid Date Range") {
+            updateFields.clientTAT = tat;
+            clientTATUpdates++;
+          }
+        }
+
+        // Update in DB
         const result = await KYC.updateOne(
-          { _id: caseDoc._id }, 
+          { _id: caseDoc._id },
           { $set: updateFields }
         );
 
-        // Count only if document was actually modified
         if (result.modifiedCount > 0 && !updatedCaseIds.includes(caseDoc.caseId)) {
           updatedCount++;
           updatedCaseIds.push(caseDoc.caseId);
         }
+
       } catch (error) {
         errors.push(`Failed to update case ${caseDoc.caseId}: ${error.message}`);
       }
@@ -3281,12 +3295,13 @@ exports.batchUpdate = async (req, res) => {
       clientTATUpdates,
       errors: errors.length > 0 ? errors : undefined
     });
+
   } catch (error) {
     console.error("Batch update error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Batch update failed", 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      message: "Batch update failed",
+      error: error.message
     });
   }
 };
@@ -3294,52 +3309,59 @@ exports.batchUpdate = async (req, res) => {
 // exports.batchUpdate = async (req, res) => {
 //   try {
 //     const { caseIds, updates } = req.body;
-//     console.log("caseid",caseIds)
     
+//     // Validate input
 //     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
 //       return res.status(400).json({ success: false, message: "Invalid caseIds" });
 //     }
     
-//     if (!updates || typeof updates !== 'object') {
+//     if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
 //       return res.status(400).json({ success: false, message: "Invalid updates" });
 //     }
 
-//     // First get all cases to check for changes
-//     const cases = await KYC.find({ caseId: { $in: caseIds } });
+//     // Normalize and deduplicate caseIds
+//     const uniqueCaseIds = [...new Set(caseIds.map(id => String(id).trim()).filter(Boolean))];
+    
+//     // Get all cases in a single query
+//     const cases = await KYC.find({ caseId: { $in: uniqueCaseIds } });
+    
 //     if (cases.length === 0) {
 //       return res.status(404).json({ success: false, message: "No cases found" });
 //     }
 
-//     const now = new Date();
 //     let updatedCount = 0;
 //     let clientTATUpdates = 0;
 //     const errors = [];
+//     const updatedCaseIds = [];
 
-//     // Process each case individually for better tracking
+//     // Process each case
 //     for (const caseDoc of cases) {
 //       try {
-//         const update = { ...updates, updatedAt: getFormattedDateTime() };
-//         let shouldUpdate = false;
-
-//         // Check if any field actually changes
+//         // Check for actual changes
+//         const updateFields = {};
+//         let hasChanges = false;
+        
 //         for (const [key, value] of Object.entries(updates)) {
 //           if (caseDoc[key] !== value) {
-//             shouldUpdate = true;
-//             break;
+//             hasChanges = true;
+//             updateFields[key] = value;
 //           }
 //         }
 
-//         if (!shouldUpdate) continue;
+//         if (!hasChanges) continue;
+
+//         // Add metadata
+//         updateFields.updatedAt = getFormattedDateTime();
 
 //         // Handle Closed status
 //         if ((updates.status === "Closed" || updates.vendorStatus === "Closed")) {
 //           const startDate = caseDoc.sentDate ? parseCustomDateTime(caseDoc.sentDate) : null;
-//           const endDate = moment().toISOString();;
+//           const endDate = moment().toISOString();
 
 //           if (startDate && endDate) {
 //             const tat = calculateTAT(startDate, endDate);
 //             if (tat !== 'N/A' && tat !== 'Invalid Date Range') {
-//               update.clientTAT = tat;
+//               updateFields.clientTAT = tat;
 //               clientTATUpdates++;
 //             }
 //           }
@@ -3347,12 +3369,21 @@ exports.batchUpdate = async (req, res) => {
 
 //         // Handle Sent status
 //         if (updates.caseStatus === "Sent") {
-//           if (!updates.sentBy) update.sentBy = "System";
-//           if (!updates.sentDate) update.sentDate = getFormattedDateTime();
+//           if (!updates.sentBy) updateFields.sentBy = "System";
+//           if (!updates.sentDate) updateFields.sentDate = getFormattedDateTime();
 //         }
 
-//         await KYC.updateOne({ _id: caseDoc._id }, { $set: update });
-//         updatedCount++;
+//         // Perform update
+//         const result = await KYC.updateOne(
+//           { _id: caseDoc._id }, 
+//           { $set: updateFields }
+//         );
+
+//         // Count only if document was actually modified
+//         if (result.modifiedCount > 0 && !updatedCaseIds.includes(caseDoc.caseId)) {
+//           updatedCount++;
+//           updatedCaseIds.push(caseDoc.caseId);
+//         }
 //       } catch (error) {
 //         errors.push(`Failed to update case ${caseDoc.caseId}: ${error.message}`);
 //       }
@@ -3360,8 +3391,9 @@ exports.batchUpdate = async (req, res) => {
 
 //     res.json({
 //       success: true,
-//       message: `Processed ${cases.length} records`,
+//       message: `Processed ${uniqueCaseIds.length} records`,
 //       updatedCount,
+//       updatedCaseIds,
 //       clientTATUpdates,
 //       errors: errors.length > 0 ? errors : undefined
 //     });
@@ -3374,3 +3406,4 @@ exports.batchUpdate = async (req, res) => {
 //     });
 //   }
 // };
+

@@ -45,7 +45,6 @@ const trackerSchema = new mongoose.Schema({
     year: { type: String }, // Add year field
     month: { type: String }, // Add month field
     role: { type: String, enum: ["admin", "employee", "client"]},
-    n: { type: String },
 
     attachments: [{
         caseId:String,

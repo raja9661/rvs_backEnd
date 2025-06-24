@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
-const moment = require("moment");
+const moment = require('moment-timezone');
 
 const getFormattedDateTime = () => {
-  return moment().format("DD-MM-YYYY, hh:mm:ss A");
+  return moment().tz("Asia/Kolkata").format("DD-MM-YYYY, hh:mm:ss A");
 };
 
 

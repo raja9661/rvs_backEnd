@@ -346,6 +346,7 @@ exports.updateUser = async (req, res) => {
     
     // Only update password if a new one is provided
     if (updates.password && updates.password.trim() !== '') {
+      updates.showPassword = updates.password
       const salt = await bcrypt.genSalt(10);
       updates.password = await bcrypt.hash(updates.password, salt);
     } else {
