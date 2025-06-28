@@ -6,4 +6,13 @@ const employeeAccessSchema = new mongoose.Schema({
   assignedByAdmin: { type: String, required: true },
 }, { timestamps: true });
 
-module.exports = mongoose.model("EmployeeAccess", employeeAccessSchema);
+const clientAccessSchema = new mongoose.Schema({
+  clientName: { type: String, required: true, unique: true },
+  editableColumns: { type: [String], default: [] },
+  assignedByAdmin: { type: String, required: true },
+}, { timestamps: true });
+
+module.exports = {
+  EmployeeAccess: mongoose.model('EmployeeAccess', employeeAccessSchema),
+  ClientAccess: mongoose.model("ClientAccess", clientAccessSchema),
+};

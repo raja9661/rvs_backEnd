@@ -409,7 +409,7 @@ exports.getVendors = async (req, res) => {
 
 exports.getProductsforvandor = async (req, res) => {
     try {
-        const product = await Product.find({});
+        const product = await Product.distinct("updatedProduct");
         res.json(product);
     } catch (err) {
         res.status(500).json({ message: err.message });

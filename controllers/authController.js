@@ -4,15 +4,8 @@ const User = require("../models/users");
 require('dotenv').config();
 const axios = require("axios");
 const sendEmail = require("../config/emailService");
-
+const mongoose = require('mongoose');
 // Your static list of valid client codes
-const VALID_CLIENT_CODES = [
-  "BK", "SATNAM", "OG", "DEE", "KM", "ILC", "PRO", 
-  "NTK-2", "NTK-3", "NTK-4", "AC", "HAIER", "OD", 
-  "PMC", "MT", "TG", "VEN", "SK", "RF", "ALT", 
-  "SS", "CCS", "RCA", "UR", "PRA", "JAI", "GL", 
-  "AP", "HF", "CV", "VG", "VG-1", "ATT", "CCC"
-];
 
 exports.createUser = async (req, res) => {
   try {
@@ -33,6 +26,7 @@ exports.createUser = async (req, res) => {
     }
 
     // Validate client code if role is client
+    // Validate client code if role is client
     if (role === 'client') {
       if (!clientCode) {
         return res.status(400).json({ 
@@ -41,9 +35,15 @@ exports.createUser = async (req, res) => {
         });
       }
       
-      if (!VALID_CLIENT_CODES.includes(clientCode)) {
+      // Check if client code is already assigned to an active user
+      const existingClient = await User.findOne({ 
+        clientCode,
+        role: 'client'
+      });
+      
+      if (existingClient) {
         return res.status(400).json({ 
-          message: "Invalid client code",
+          message: `Client code ${clientCode} is already assigned to active user ${existingClient.name}`,
           field: "clientCode"
         });
       }
@@ -411,17 +411,59 @@ exports.updateUser = async (req, res) => {
 // };
 
 // Delete user
+
 exports.deleteUser = async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
+    // First find the user to get their client code
+    const user = await User.findById(req.params.id);
+    
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
+
+    // Store the client code before deletion
+    const clientCode = user.clientCode;
+    const userId = user.userId;
+
+    // Delete the user
+    await User.findByIdAndDelete(req.params.id);
+
+    // If the user was a client, clean up their cases
+    if (user.role === 'client' && clientCode) {
+      await mongoose.model("KYCdoc").updateMany(
+        { clientCode },
+        { $set: { 
+          clientCode: "", 
+          role: "",
+        }}
+      );
+    }
+
+    // Also clean up any cases where this user was the assigned user
+    await mongoose.model("KYCdoc").updateMany(
+      { userId },
+      { $set: { 
+        userId: "", 
+        role: "",
+      }}
+    );
+
     res.json({ success: true, data: {} });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+// exports.deleteUser = async (req, res) => {
+//   try {
+//     const user = await User.findByIdAndDelete(req.params.id);
+//     if (!user) {
+//       return res.status(404).json({ success: false, error: 'User not found' });
+//     }
+//     res.json({ success: true, data: {} });
+//   } catch (error) {
+//     res.status(500).json({ success: false, error: error.message });
+//   }
+// };
 
 exports.toggleUserStatus = async (req, res) => {
   try {

@@ -8,7 +8,7 @@ const moment = require('moment-timezone');
 const Fuse = require("fuse.js");
 const User = require("../models/users");
 const { Product, Vendor, ClientCode } = require("../models/MappingItems");
-const EmployeeAccess = require("../models/editableColumn");
+const {EmployeeAccess,ClientAccess} = require("../models/editableColumn");
 const editableColumn = require("../models/editableColumn");
 const DeletedItems = require("../models/deletedItemsSchema ");
 const axios = require("axios");
@@ -1116,6 +1116,7 @@ const FIELD_ORDERS = {
     'sentBy',
     'caseDoneBy',
     'customerCare',
+    'NameUploadBy',
     'sentDate',
     'isRechecked'
   ]
@@ -1211,6 +1212,7 @@ exports.getTrackerData = async (req, res) => {
         autoOrManual: 1,
         caseDoneBy: 1,
         clientTAT: 1,
+        NameUploadBy: 1,
         customerCare: 1,
         sentDate: 1,
         sentDateInDay: 1,
@@ -1255,6 +1257,7 @@ exports.getTrackerData = async (req, res) => {
         sentBy: 1,
         caseDoneBy: 1,
         customerCare: 1,
+        NameUploadBy: 1,
         sentDate: 1,
         isRechecked: 1
       };
@@ -1282,7 +1285,9 @@ exports.getTrackerData = async (req, res) => {
         .sort({ _id: -1 });
 
       const orderedData = trackerData.map(doc => orderFields(doc, FIELD_ORDERS.client));
-      return res.json(orderedData);
+      const clientAccess = await ClientAccess.findOne({ clientName: name });
+      const editableColumns = clientAccess?.editableColumns || [];
+      return res.json({ data: orderedData, editableColumns });
     }
 
     res.status(400).json({ success: false, message: "Invalid role specified" });

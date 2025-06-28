@@ -1,14 +1,19 @@
 const express = require('express');
-const {
-    assignOrUpdateAccess,
-    deleteEmployeeAccess,
-    fetchAllAssignedEmployees
-} = require('../controllers/AccessManagement')
-
 const router = express.Router();
+const accessController = require('../controllers/AccessManagement');
 
-router.post("/assign-access", assignOrUpdateAccess);
-router.delete("/delete-access/:employeeName", deleteEmployeeAccess);
-router.get("/assigned-employees", fetchAllAssignedEmployees);
+// Employee access routes
+router.get('/assigned-employees', accessController.fetchAllAssignedEmployees);
+router.post('/assign-employee-access', accessController.assignOrUpdateEmployeeAccess);
+router.delete('/delete-employee-access/:employeeName', accessController.deleteEmployeeAccess);
+
+// Client access routes
+router.get('/assigned-clients', accessController.fetchAllAssignedClients);
+router.post('/assign-client-access', accessController.assignOrUpdateClientAccess);
+router.delete('/delete-client-access/:clientName', accessController.deleteClientAccess);
+
+// Common routes
+router.get('/users/:role', accessController.getUsersByRole);
+router.get('/available-columns', accessController.getAvailableColumns);
 
 module.exports = router;

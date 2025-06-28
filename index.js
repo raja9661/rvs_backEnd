@@ -15,6 +15,7 @@ const accessManager = require('./routers/ManagementRouter');
 const Mapping = require('./routers/mappingRouter');
 const LiveDashRoute = require('./routers/dashboardRoutes');
 const AboutUs = require('./routers/aboutUsRouter');
+const support = require('./routers/support.routes');
 
 
 dotenv.config();
@@ -97,6 +98,7 @@ app.use('/api/access', accessManager);
 app.use('/api/mapping', Mapping);
 app.use('/api/dashboard', LiveDashRoute);
 app.use('/api/about', AboutUs);
+app.use('/api/support', support);
 
 
 

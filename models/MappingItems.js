@@ -12,6 +12,7 @@ const productSchema = new mongoose.Schema({
 const clientCodeSchema = new mongoose.Schema({
   EmployeeName: { type: String, required: true },
   clientCode: { type: [String], default: [],required: true },
+  clientType: { type: String},
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
