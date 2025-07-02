@@ -51,7 +51,7 @@ exports.createUser = async (req, res) => {
 
     // Check for existing user
     const existingUser = await User.findOne({ 
-      $or: [{ email }, { userId }, { phoneNumber }] 
+      $and: [{ email }, { userId }, { phoneNumber }] 
     });
     
     if (existingUser) {
@@ -433,8 +433,7 @@ exports.deleteUser = async (req, res) => {
       await mongoose.model("KYCdoc").updateMany(
         { clientCode },
         { $set: { 
-          clientCode: "", 
-          role: "",
+          clientCode: "deleted_code", 
         }}
       );
     }

@@ -21,7 +21,10 @@ const {
     getClientCodes,
     getVendorsByType,
     getAllVendors,
-    getColumns
+    getColumns,
+    addClientCodeandType,
+    getAllClientCodes,
+    deleteClientCode
 } = require("../controllers/MappingController")
 
 
@@ -49,5 +52,10 @@ router.delete('/deleteVendorProducts/:id', deleteVendorProducts);
 router.delete("/:vendorId/product/:productName", removeProductFromVendor);
 router.get('/type/:type', getVendorsByType);
 
+////////////////////****** Client code Management*/////////////////////////////////
+
+router.post('/addcode', addClientCodeandType);
+router.get('/getcode', getAllClientCodes );
+router.delete('/deletecode/:id', deleteClientCode );
 
 module.exports = router;

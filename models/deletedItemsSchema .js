@@ -35,6 +35,26 @@ const DeletedItemsSchema = new mongoose.Schema({
       dedupBy: { type: String, default: "" },
       vendorRate: { type: Number, defaul:"" },
       clientRate: { type: Number, defaul:"" },
+      NameUploadBy: { type: String, default:"" },
+    isRechecked: { type: Boolean, default: false },
+    recheckedAt: { type: Date },
+    ipAddress:{ type: String, default: "" },
+    vendorStatus:{ type: String, default: "" },
+    year: { type: String }, // Add year field
+    month: { type: String }, // Add month field
+    role: { type: String, enum: ["admin", "employee", "client"]},
+
+    attachments: [{
+        caseId:String,
+        filename: String,
+        originalname: String,
+        mimetype: String,
+        size: Number,
+        path: String,
+        location: String,
+        key: String,
+        uploadedAt:String
+      }],
   deletedAt: {
     type: Date,
     default: Date.now

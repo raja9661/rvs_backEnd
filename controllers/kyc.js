@@ -7,7 +7,7 @@ const mongoose = require("mongoose"); // Add this import for ObjectId conversion
 const moment = require('moment-timezone');
 const Fuse = require("fuse.js");
 const User = require("../models/users");
-const { Product, Vendor, ClientCode } = require("../models/MappingItems");
+const { Product, Vendor, ClientCode,ManageClientCode } = require("../models/MappingItems");
 const {EmployeeAccess,ClientAccess} = require("../models/editableColumn");
 const editableColumn = require("../models/editableColumn");
 const DeletedItems = require("../models/deletedItemsSchema ");
@@ -27,7 +27,7 @@ const {
 const { parseCustomDateTime,  formatForFrontend } = require('../utils/dateUtils');
 
 
-
+const date = new Date();
 const generateCaseId = () => {
   return Math.floor(10000 + Math.random() * 90000); // Generates a 5-digit number
 };
@@ -111,53 +111,72 @@ const findBestMatch = async (productName) => {
 };
 
 // utils/clientTypeMapper.js
-const getClientType = (clientCode) => {
+
+// const getClientType = (clientCode) => {
+//   const cleanedCode = clientCode.trim().replace(/\s+/g, "").toUpperCase();
+
+//   const agencyCodes = new Set([
+//     "OG",
+//     "KM",
+//     "PMC",
+//     "MT",
+//     "TG",
+//     "VEN",
+//     "SK",
+//     "RF",
+//     "ALT",
+//     "SS",
+//     "CCS",
+//     "RCA",
+//     "UR",
+//     "PRA",
+//     "GL",
+//     "AP",
+//     "HF",
+//     "CV",
+//     "VG",
+//     "VG-1",
+//     "CCC",
+//   ]);
+
+//   const corporateCodes = new Set([
+//     "ILC",
+//     "PRO",
+//     "NTK-2",
+//     "NTK-3",
+//     "NTK-4",
+//     "AC",
+//     "HAIER",
+//     "ATT",
+//   ]);
+
+//   const otherCodes = new Set(["BK", "SATNAM", "DEE", "JAI"]);
+
+//   if (agencyCodes.has(cleanedCode)) return "AGENCY";
+//   if (corporateCodes.has(cleanedCode)) return "CORPORATE";
+//   if (otherCodes.has(cleanedCode)) return "OTHER";
+
+//   return "UNKNOWN";
+// };
+const getClientType = async (clientCode) => {
+  if (!clientCode) return "UNKNOWN";
+  console.log(clientCode)
+
   const cleanedCode = clientCode.trim().replace(/\s+/g, "").toUpperCase();
+  console.log(cleanedCode)
+  try {
+    const record = await ManageClientCode.findOne({ clientCode: cleanedCode });
+    console.log(record)
+    if (!record) {
+      return "UNKNOWN";
+    }
 
-  const agencyCodes = new Set([
-    "OG",
-    "KM",
-    "PMC",
-    "MT",
-    "TG",
-    "VEN",
-    "SK",
-    "RF",
-    "ALT",
-    "SS",
-    "CCS",
-    "RCA",
-    "UR",
-    "PRA",
-    "GL",
-    "AP",
-    "HF",
-    "CV",
-    "VG",
-    "VG-1",
-    "CCC",
-  ]);
-
-  const corporateCodes = new Set([
-    "ILC",
-    "PRO",
-    "NTK-2",
-    "NTK-3",
-    "NTK-4",
-    "AC",
-    "HAIER",
-    "ATT",
-  ]);
-
-  const otherCodes = new Set(["BK", "SATNAM", "DEE", "JAI"]);
-
-  if (agencyCodes.has(cleanedCode)) return "AGENCY";
-  if (corporateCodes.has(cleanedCode)) return "CORPORATE";
-  if (otherCodes.has(cleanedCode)) return "OTHER";
-
-  return "UNKNOWN";
+    return record.clientType || "UNKNOWN";
+  } catch (error) {
+    console.error("Error fetching client type:", error);
+    return "UNKNOWN";
+  }
 };
-
 exports.getProductname = async (req, res) => {
   try {
     const products = await Product.find();
@@ -196,29 +215,45 @@ const getIPAddress = (req) => {
 
 exports.singleUpload = async (req, res) => {
   try {
-    let { name, product, accountNumber, requirement, userId, clientId } =
+    let { name, product, accountNumber, requirement, userId, clientId,ReferBy } =
       req.body;
+      
     let NameUploadBy = "";
+    let userclientcode = "";
     if (!userId) {
       return res
         .status(400)
         .json({ success: false, message: "User ID is required" });
-    } else {
-      const userName = await User.findOne({ userId });
-      NameUploadBy = userName?.name || "";
     }
+    if(userId && clientId)
+    {
+      NameUploadBy = userId
+      const user = await User.findOne({ clientCode: clientId });
+      
+      if(!user){
+        return res
+        .status(400)
+        .json({ success: false, message: `No user is Found with this client code ${clientId}` });
+      }else{
+        userclientcode = clientId
+      }
+    }
+    if(userId && !clientId){
+      NameUploadBy = userId
+      const user = await User.findOne({ userId: userId });
+      if(!user){
+        return res
+        .status(400)
+        .json({ success: false, message: `No user is Found with this userId ${userId}` });
+      }else{
+        userclientcode = user.clientCode
+      }
+    }
+    
 
     // Resolve client code (handles both clientId and clientCode input)
-    let userclientcode = await getClientCode(userId, clientId);
-    if (!userclientcode && clientId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid Client ID/Code" });
-    }
-    if (!clientId) {
-      let new_clientcode = await User.findOne({ userId });
-      userclientcode = new_clientcode.clientCode;
-    }
+    // let userclientcode = await getClientCode(userId, clientId);
+
 
     const currentDate = moment().format("YYYY-MM-DD");
 
@@ -261,15 +296,11 @@ exports.singleUpload = async (req, res) => {
     const vendor = await Vendor.find({ productName: standardized.updatedName });
     const vandorname = vendor[0]?.vendorName || "not found";
 
-    if (client_user) {
-      userId = client_user;
-    }
     let ipAddress = getIPAddress(req);
             if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
               const ipResponse = await axios.get("https://api64.ipify.org?format=json");
               ipAddress = ipResponse.data.ip; // Get actual public IP
             }
-    console.log("uu:", userId);
     
     // Create new KYC record
     const newKYC = new KYC({
@@ -287,12 +318,15 @@ exports.singleUpload = async (req, res) => {
       updatedProductName: standardized.updatedName,
       clientCode: userclientcode,
       listByEmployee: empName,
-      clientType: getClientType(userclientcode),
+      clientType: await getClientType(userclientcode),
       vendorName: vandorname,
       // createdAt: getFormattedDateTime(),
       customerCare,
       NameUploadBy,
-      ipAddress
+      ipAddress,
+      ReferBy:ReferBy||"",
+      year: date.getFullYear().toString(),
+      month: (date.getMonth() + 1).toString().padStart(2, '0')
     });
 
     const response = await newKYC.save();
@@ -314,7 +348,6 @@ exports.singleUpload = async (req, res) => {
 
 
 // Bulk KYC Upload (Handsontable)
-
 exports.bulkUpload = async (req, res) => {
   try {
     const { data } = req.body;
@@ -339,8 +372,8 @@ exports.bulkUpload = async (req, res) => {
     const insertDocs = [];
     const dbKeys = [];
     const uniqueUserIds = new Set();
-    const userIdNameMap = new Map();
     const userIdClientCodeMap = new Map();
+    let ReferBy = "";
 
     // Collect required data for bulk processing
     for (const row of data) {
@@ -350,6 +383,7 @@ exports.bulkUpload = async (req, res) => {
       const name = String(row.name || "").trim();
       const userId = row.userId?.trim();
       const clientId = row.clientId?.trim();
+      ReferBy = row.ReferBy?.trim();
 
       if (!userId) {
         return res.status(400).json({ success: false, message: "User ID is required" });
@@ -369,7 +403,6 @@ exports.bulkUpload = async (req, res) => {
       fileDuplicateTracker.add(key);
 
       dbKeys.push({ accountNumber, product, requirement });
-
       uniqueUserIds.add(userId);
 
       insertDocs.push({
@@ -385,10 +418,17 @@ exports.bulkUpload = async (req, res) => {
     }
 
     // 🔄 Step 1: Preload User Info
-    const users = await User.find({ userId: { $in: Array.from(uniqueUserIds) } });
+    const users = await User.find({ 
+      $or: [
+        { userId: { $in: Array.from(uniqueUserIds) } },
+        { clientCode: { $in: data.map(d => d.clientId).filter(Boolean) } }
+      ]
+    });
+    
     users.forEach(user => {
-      userIdNameMap.set(user.userId, user.name);
-      userIdClientCodeMap.set(user.userId, user.clientCode);
+      if (user.userId) {
+        userIdClientCodeMap.set(user.userId, user.clientCode);
+      }
     });
 
     // 🔄 Step 2: Preload Existing DB Records (same-day duplicates)
@@ -429,8 +469,44 @@ exports.bulkUpload = async (req, res) => {
         continue;
       }
 
-      const NameUploadBy = userIdNameMap.get(userId) || "";
+      let userclientcode = "";
+      let NameUploadBy = userId;
 
+      // Determine client code based on your new logic
+      if (userId && clientId) {
+        const user = users.find(u => u.clientCode === clientId);
+        if (!user) {
+          results.failed++;
+          results.failedRecords.push({ 
+            ...original, 
+            error: `No user found with client code ${clientId}` 
+          });
+          continue;
+        }
+        userclientcode = clientId;
+      } else if (userId && !clientId) {
+        const user = users.find(u => u.userId === userId);
+        if (!user) {
+          results.failed++;
+          results.failedRecords.push({ 
+            ...original, 
+            error: `No user found with userId ${userId}` 
+          });
+          continue;
+        }
+        userclientcode = user.clientCode;
+      }
+
+      if (!userclientcode) {
+        results.failed++;
+        results.failedRecords.push({ 
+          ...original, 
+          error: "Client code could not be determined" 
+        });
+        continue;
+      }
+
+      // Standardize product name
       const bestMatch = await findBestMatch(product);
       const standardized = bestMatch || {
         updatedName: product,
@@ -438,30 +514,17 @@ exports.bulkUpload = async (req, res) => {
         productType: "",
       };
 
-      let clientCode = await getClientCode(userId, clientId);
-      if (!clientCode && clientId) {
-        results.failed++;
-        results.failedRecords.push({ ...original, error: "Invalid Client ID/Code" });
-        continue;
+      // Get additional data
+      const employees = await ClientCode.find({ clientCode: userclientcode });
+      const empName = employees[0]?.EmployeeName || "";
+      let customerCare = "";
+      if (empName) {
+        const employee = await User.findOne({ name: empName });
+        customerCare = employee?.phoneNumber || "";
       }
-
-      if (!clientCode) {
-        clientCode = userIdClientCodeMap.get(userId);
-      }
-
-      if (!clientCode) {
-        results.failed++;
-        results.failedRecords.push({ ...original, error: "Client code not found" });
-        continue;
-      }
-
-      const empData = await ClientCode.findOne({ clientCode });
-      const empName = empData?.EmployeeName || "";
-      const employee = empName ? await User.findOne({ name: empName }) : null;
-      const customerCare = employee?.phoneNumber || "";
-
+      
       const vendor = await Vendor.findOne({ productName: standardized.updatedName });
-      const vendorName = vendor?.vendorName || "not found";
+      const vandorname = vendor?.vendorName || "not found";
 
       let ipAddress = getIPAddress(req);
       if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
@@ -486,14 +549,17 @@ exports.bulkUpload = async (req, res) => {
         correctUPN: standardized.upn,
         productType: standardized.productType,
         updatedProductName: standardized.updatedName,
-        clientCode,
+        clientCode: userclientcode,
         listByEmployee: empName,
-        clientType: getClientType(clientCode),
-        vendorName,
-        createdAt: currentDate,
+        clientType: await getClientType(userclientcode),
+        vendorName: vandorname,
         customerCare,
         NameUploadBy,
         ipAddress,
+        ReferBy:ReferBy || "",
+        
+        year: new Date().getFullYear().toString(),
+        month: (new Date().getMonth() + 1).toString().padStart(2, '0')
       });
     }
 
@@ -507,8 +573,8 @@ exports.bulkUpload = async (req, res) => {
     if (results.inserted === 0 && results.failed === data.length) {
       return res.status(400).json({
         success: false,
-        message: "No valid data to upload",
-        details: results,
+        message: "Plese check client-code is assign with active client  ",
+        details: results, 
       });
     }
 
@@ -533,6 +599,227 @@ exports.bulkUpload = async (req, res) => {
     });
   }
 };
+// exports.bulkUpload = async (req, res) => {
+//   try {
+//     const { data } = req.body;
+
+//     if (!data || !Array.isArray(data) || data.length === 0) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid or empty data",
+//       });
+//     }
+
+//     const currentDate = moment().format("YYYY-MM-DD");
+//     const results = {
+//       inserted: 0,
+//       fileDuplicates: 0,
+//       dbDuplicates: 0,
+//       failed: 0,
+//       failedRecords: [],
+//     };
+
+//     const fileDuplicateTracker = new Set();
+//     const insertDocs = [];
+//     const dbKeys = [];
+//     const uniqueUserIds = new Set();
+//     const userIdNameMap = new Map();
+//     const userIdClientCodeMap = new Map();
+
+//     // Collect required data for bulk processing
+//     for (const row of data) {
+//       const accountNumber = String(row.accountNumber || "").trim();
+//       const product = String(row.product || "").trim();
+//       const requirement = String(row.requirement || "").trim();
+//       const name = String(row.name || "").trim();
+//       const userId = row.userId?.trim();
+//       const clientId = row.clientId?.trim();
+
+//       if (!userId) {
+//         return res.status(400).json({ success: false, message: "User ID is required" });
+//       }
+      
+
+//       if (!name || !accountNumber || !product || !requirement) {
+//         results.failed++;
+//         results.failedRecords.push({ ...row, error: "Missing required fields" });
+//         continue;
+//       }
+
+//       const key = `${accountNumber}-${product}-${requirement}`;
+//       if (fileDuplicateTracker.has(key)) {
+//         results.fileDuplicates++;
+//         continue;
+//       }
+//       fileDuplicateTracker.add(key);
+
+//       dbKeys.push({ accountNumber, product, requirement });
+
+//       uniqueUserIds.add(userId);
+
+//       insertDocs.push({
+//         original: row,
+//         key,
+//         name,
+//         product,
+//         accountNumber,
+//         requirement,
+//         userId,
+//         clientId,
+//       });
+//     }
+
+//     // 🔄 Step 1: Preload User Info
+//     const users = await User.find({ userId: { $in: Array.from(uniqueUserIds) } });
+//     users.forEach(user => {
+//       userIdNameMap.set(user.userId, user.name);
+//       userIdClientCodeMap.set(user.userId, user.clientCode);
+//     });
+
+//     // 🔄 Step 2: Preload Existing DB Records (same-day duplicates)
+//     const existingRecords = await KYC.find({
+//       $or: dbKeys.map(key => ({
+//         accountNumber: key.accountNumber,
+//         product: key.product,
+//         requirement: key.requirement,
+//         createdAt: {
+//           $gte: new Date(`${currentDate}T00:00:00Z`),
+//           $lt: new Date(`${currentDate}T23:59:59Z`),
+//         },
+//       })),
+//     });
+
+//     const existingSet = new Set(
+//       existingRecords.map(r => `${r.accountNumber}-${r.product}-${r.requirement}`)
+//     );
+
+//     // 🔄 Step 3: Process Data & Prepare for Bulk Insert
+//     const bulkInsert = [];
+
+//     for (const item of insertDocs) {
+//       const {
+//         original,
+//         name,
+//         product,
+//         accountNumber,
+//         requirement,
+//         userId,
+//         clientId,
+//         key,
+//       } = item;
+
+//       // Skip if exists in DB
+//       if (existingSet.has(key)) {
+//         results.dbDuplicates++;
+//         continue;
+//       }
+
+//       const NameUploadBy = userIdNameMap.get(userId) || "";
+
+//       const bestMatch = await findBestMatch(product);
+//       const standardized = bestMatch || {
+//         updatedName: product,
+//         upn: "",
+//         productType: "",
+//       };
+
+//       let clientCode = await getClientCode(userId, clientId);
+//       if (!clientCode && clientId) {
+//         results.failed++;
+//         results.failedRecords.push({ ...original, error: "Invalid Client ID/Code" });
+//         continue;
+//       }
+
+//       if (!clientCode) {
+//         clientCode = userIdClientCodeMap.get(userId);
+//       }
+
+//       if (!clientCode) {
+//         results.failed++;
+//         results.failedRecords.push({ ...original, error: "Client code not found" });
+//         continue;
+//       }
+
+//       const empData = await ClientCode.findOne({ clientCode });
+//       const empName = empData?.EmployeeName || "";
+//       const employee = empName ? await User.findOne({ name: empName }) : null;
+//       const customerCare = employee?.phoneNumber || "";
+
+//       const vendor = await Vendor.findOne({ productName: standardized.updatedName });
+//       const vendorName = vendor?.vendorName || "not found";
+
+//       let ipAddress = getIPAddress(req);
+//       if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
+//         try {
+//           const ipRes = await axios.get("https://api64.ipify.org?format=json");
+//           ipAddress = ipRes.data.ip;
+//         } catch (err) {
+//           ipAddress = "unknown";
+//         }
+//       }
+
+//       bulkInsert.push({
+//         name,
+//         product,
+//         accountNumber,
+//         requirement,
+//         userId,
+//         caseId: generateCaseId(),
+//         dateIn: getFormattedDateTime(),
+//         dateInDate: getFormattedDateDay(),
+//         accountNumberDigit: countDigits(accountNumber),
+//         correctUPN: standardized.upn,
+//         productType: standardized.productType,
+//         updatedProductName: standardized.updatedName,
+//         clientCode,
+//         listByEmployee: empName,
+//         clientType: await getClientType(clientCode),
+//         vendorName,
+//         createdAt: currentDate,
+//         customerCare,
+//         NameUploadBy,
+//         ipAddress,
+//         year: date.getFullYear().toString(),
+//         month: (date.getMonth() + 1).toString().padStart(2, '0')
+//       });
+//     }
+
+//     // 🔄 Step 4: Bulk Insert
+//     if (bulkInsert.length > 0) {
+//       await KYC.insertMany(bulkInsert);
+//       results.inserted = bulkInsert.length;
+//     }
+
+//     // 🔄 Step 5: Final Response
+//     if (results.inserted === 0 && results.failed === data.length) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "No valid data to upload",
+//         details: results,
+//       });
+//     }
+
+//     res.json({
+//       success: true,
+//       message: `Processed ${data.length} records`,
+//       stats: {
+//         totalRecords: data.length,
+//         inserted: results.inserted,
+//         fileDuplicates: results.fileDuplicates,
+//         dbDuplicates: results.dbDuplicates,
+//         failed: results.failed,
+//         failedRecords: results.failedRecords,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Bulk Upload Error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Bulk upload failed",
+//       error: error.message,
+//     });
+//   }
+// };
 
 
 // Excel File Upload
@@ -572,7 +859,7 @@ exports.uploadFile = async (req, res) => {
 exports.extractData = async (req, res) => {
   try {
     const { fileKey } = req.params;
-    const { userId, clientId } = req.body;
+    const { userId, clientId , ReferBy } = req.body;
 
     // Get IP address
     let ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
@@ -603,34 +890,68 @@ exports.extractData = async (req, res) => {
   }
 };
 
-// Step 3: Process records
 exports.processRecords = async (req, res) => {
   try {
     const { fileKey } = req.params;
-    const { userId, clientId, ipAddress } = req.body;
+    const { userId, clientId, ipAddress,ReferBy } = req.body;
+    console.log("ReferBy",ReferBy)
 
-    // Get file from S3 again (or could pass data from previous step)
+    // Validate userId
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "User ID is required" });
+    }
+
+    // Get file from S3 again
     const fileBuffer = await getS3FileBuffer(process.env.AWS_BUCKET_NAME, fileKey);
     const workbook = XLSX.read(fileBuffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-    const user = await User.findOne({ userId });
-    const NameUploadBy = user?.name || "";
     const currentDate = moment().format("YYYY-MM-DD");
     
     // Process records in smaller chunks
     const batchSize = 50;
     const results = {
+      total:0,
       inserted: 0,
       duplicates: 0,
       failed: 0,
       failedRecords: []
     };
 
+    // First validate client code
+    let userclientcode = "";
+    if (userId && clientId) {
+      const user = await User.findOne({ clientCode: clientId });
+      if (!user) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `No user found with client code ${clientId}` 
+        });
+      }
+      userclientcode = clientId;
+    } else if (userId && !clientId) {
+      const user = await User.findOne({ userId: userId });
+      if (!user) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `No user found with userId ${userId}` 
+        });
+      }
+      userclientcode = user.clientCode;
+    }
+
+    results.total = jsonData.length
     for (let i = 0; i < jsonData.length; i += batchSize) {
       const batch = jsonData.slice(i, i + batchSize);
-      const batchResults = await processBatch(batch, userId, clientId, ipAddress, currentDate, NameUploadBy);
+      const batchResults = await processBatch(
+        batch, 
+        userId, 
+        userclientcode, 
+        ipAddress, 
+        currentDate,
+        ReferBy
+      );
       
       results.inserted += batchResults.inserted;
       results.duplicates += batchResults.duplicates;
@@ -649,23 +970,13 @@ exports.processRecords = async (req, res) => {
   }
 };
 
-async function processBatch(batch, userId, clientId, ipAddress, currentDate, NameUploadBy) {
+async function processBatch(batch, userId, userclientcode, ipAddress, currentDate,ReferBy) {
   const results = {
     inserted: 0,
     duplicates: 0,
     failed: 0,
     failedRecords: []
   };
-
-  // Get client code once per batch
-  let userclientcode = await getClientCode(userId, clientId);
-  if (!userclientcode && clientId) {
-    throw new Error("Invalid Client ID/Code");
-  }
-  if (!clientId) {
-    const new_clientcode = await User.findOne({ userId });
-    userclientcode = new_clientcode.clientCode;
-  }
 
   // Get employee details once per batch
   const employees = await ClientCode.find({ clientCode: userclientcode });
@@ -738,12 +1049,15 @@ async function processBatch(batch, userId, clientId, ipAddress, currentDate, Nam
         updatedProductName: standardized.updatedName,
         clientCode: userclientcode,
         listByEmployee: empName,
-        clientType: getClientType(userclientcode),
+        clientType: await getClientType(userclientcode),
         vendorName: vandorname,
         createdAt: currentDate,
         customerCare,
-        NameUploadBy,
-        ipAddress
+        NameUploadBy: userId,
+        ipAddress,
+        ReferBy:ReferBy || "",
+        year: new Date().getFullYear().toString(),
+        month: (new Date().getMonth() + 1).toString().padStart(2, '0')
       });
 
       results.inserted++;
@@ -759,6 +1073,187 @@ async function processBatch(batch, userId, clientId, ipAddress, currentDate, Nam
 
   return results;
 }
+
+// Step 3: Process records
+// exports.processRecords = async (req, res) => {
+//   try {
+//     const { fileKey } = req.params;
+//     const { userId, clientId, ipAddress } = req.body;
+
+//     // Get file from S3 again (or could pass data from previous step)
+//     const fileBuffer = await getS3FileBuffer(process.env.AWS_BUCKET_NAME, fileKey);
+//     const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+    
+//     const currentDate = moment().format("YYYY-MM-DD");
+    
+//     // Process records in smaller chunks
+//     const batchSize = 50;
+//     const results = {
+//       inserted: 0,
+//       duplicates: 0,
+//       failed: 0,
+//       failedRecords: []
+//     };
+
+//     for (let i = 0; i < jsonData.length; i += batchSize) {
+//       const batch = jsonData.slice(i, i + batchSize);
+//       const batchResults = await processBatch(batch, userId, clientId, ipAddress, currentDate,res);
+      
+//       results.inserted += batchResults.inserted;
+//       results.duplicates += batchResults.duplicates;
+//       results.failed += batchResults.failed;
+//       results.failedRecords.push(...batchResults.failedRecords);
+//     }
+
+//     res.json({
+//       success: true,
+//       message: "Records processed successfully",
+//       results
+//     });
+//   } catch (error) {
+//     console.error("Processing error:", error);
+//     res.status(500).json({ success: false, message: "Record processing failed" });
+//   }
+// };
+
+// async function processBatch(batch, userId, clientId, ipAddress, currentDate,res) {
+//   const results = {
+//     inserted: 0,
+//     duplicates: 0,
+//     failed: 0,
+//     failedRecords: []
+//   };
+
+//   // Get client code once per batch
+//     let NameUploadBy = "";
+//     let userclientcode = "";
+//     if (!userId) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "User ID is required" });
+//     }
+//     if(userId && clientId)
+//     {
+//       NameUploadBy = userId
+//       const user = await User.findOne({ clientCode: clientId });
+      
+//       if(!user){
+//         return res
+//         .status(400)
+//         .json({ success: false, message: `No user is Found with this client code ${clientId}` });
+//       }else{
+//         userclientcode = clientId
+//       }
+//     }
+//     if(userId && !clientId){
+//       NameUploadBy = userId
+//       const user = await User.findOne({ userId: userId });
+//       if(!user){
+//         return res
+//         .status(400)
+//         .json({ success: false, message: `No user is Found with this userId ${userId}` });
+//       }else{
+//         userclientcode = user.clientCode
+//       }
+//     }
+
+//   // Get employee details once per batch
+//   const employees = await ClientCode.find({ clientCode: userclientcode });
+//   const empName = employees[0]?.EmployeeName || "";
+//   let customerCare = "";
+//   if (empName) {
+//     const employee = await User.findOne({ name: empName });
+//     customerCare = employee?.phoneNumber || "";
+//   }
+
+//   // Process each record
+//   for (const row of batch) {
+//     try {
+//       const name = String(row["Name"] || "").trim();
+//       const accountNumber = String(row["Account Number"] || "").trim();
+//       const product = String(row["Product"] || "").trim();
+//       const requirement = String(row["Requirement"] || "").trim();
+
+//       // Validate required fields
+//       if (!name || !accountNumber || !product || requirement === "") {
+//         results.failed++;
+//         results.failedRecords.push({
+//           row,
+//           error: "Missing required fields"
+//         });
+//         continue;
+//       }
+
+//       // Check for existing records in DB
+//       const exists = await KYC.findOne({
+//         accountNumber,
+//         product,
+//         requirement,
+//         createdAt: {
+//           $gte: new Date(`${currentDate}T00:00:00Z`),
+//           $lt: new Date(`${currentDate}T23:59:59Z`),
+//         }
+//       });
+
+//       if (exists) {
+//         results.duplicates++;
+//         continue;
+//       }
+
+//       // Standardize product name
+//       const bestMatch = await findBestMatch(product);
+//       const standardized = bestMatch || {
+//         updatedName: product,
+//         upn: "",
+//         productType: "",
+//       };
+
+//       // Get vendor
+//       const vendor = await Vendor.findOne({ productName: standardized.updatedName });
+//       const vandorname = vendor?.vendorName || "not found";
+
+//       // Create new record
+//       await KYC.create({
+//         name,
+//         product,
+//         accountNumber,
+//         requirement,
+//         userId,
+//         caseId: generateCaseId(),
+//         dateIn: getFormattedDateTime(),
+//         dateInDate: getFormattedDateDay(),
+//         accountNumberDigit: countDigits(accountNumber),
+//         correctUPN: standardized.upn,
+//         productType: standardized.productType,
+//         updatedProductName: standardized.updatedName,
+//         clientCode: userclientcode,
+//         listByEmployee: empName,
+//         clientType: await getClientType(userclientcode),
+//         vendorName: vandorname,
+//         createdAt: currentDate,
+//         customerCare,
+//         NameUploadBy,
+//         ipAddress,
+//         year: date.getFullYear().toString(),
+//         month: (date.getMonth() + 1).toString().padStart(2, '0')
+//       });
+
+//       results.inserted++;
+//     } catch (error) {
+//       console.error("Error processing row:", error);
+//       results.failed++;
+//       results.failedRecords.push({
+//         row,
+//         error: error.message
+//       });
+//     }
+//   }
+
+//   return results;
+// }
 
 
 
@@ -1025,15 +1520,14 @@ const FIELD_ORDERS = {
     'updatedProductName',
     'accountNumber',
     'requirement',
-    'updatedRequirement',
     'accountNumberDigit',
     'bankCode',
     'clientCode',
     'vendorName',
     'vendorStatus',
     'dateIn',
-    'status',
     'dateInDate',
+    'status',
     'caseStatus',
     'productType',
     'listByEmployee',
@@ -1045,6 +1539,7 @@ const FIELD_ORDERS = {
     'clientTAT',
     'customerCare',
     'NameUploadBy',
+    'ReferBy',
     'sentDate',
     'sentDateInDay',
     'clientType',
@@ -1065,7 +1560,7 @@ const FIELD_ORDERS = {
     'updatedProductName',
     'accountNumber',
     'requirement',
-    'updatedRequirement',
+    
     'accountNumberDigit',
     'bankCode',
     'clientCode',
@@ -1084,6 +1579,7 @@ const FIELD_ORDERS = {
     'caseDoneBy',
     'clientTAT',
     'NameUploadBy',
+    'ReferBy',
     'customerCare',
     'sentDate',
     'sentDateInDay',
@@ -1101,22 +1597,25 @@ const FIELD_ORDERS = {
     'priority',
     'correctUPN',
     'product',
-    'updateProductName',
+    'updatedProductName',
     'accountNumber',
     'requirement',
-    'updatedRequirement',
+    
     'clientCode',
     'dateIn',
-    'status',
     'dateInDate',
+    'status',
+    
     'caseStatus',
     'productType',
     'listByEmployee',
     'dateOut',
     'sentBy',
     'caseDoneBy',
+    'clientTAT',
     'customerCare',
     'NameUploadBy',
+    'ReferBy',
     'sentDate',
     'isRechecked'
   ]
@@ -1144,15 +1643,15 @@ exports.getTrackerData = async (req, res) => {
         updatedProductName: 1,
         accountNumber: 1,
         requirement: 1,
-        updatedRequirement: 1,
+        
         accountNumberDigit: 1,
         bankCode: 1,
         clientCode: 1,
         vendorName: 1,
         vendorStatus:1,
         dateIn: 1,
-        status: 1,
         dateInDate: 1,
+        status: 1,
         caseStatus: 1,
         productType: 1,
         listByEmployee: 1,
@@ -1164,6 +1663,7 @@ exports.getTrackerData = async (req, res) => {
         clientTAT: 1,
         customerCare: 1,
         NameUploadBy: 1,
+        ReferBy:1,
         sentDate: 1,
         sentDateInDay: 1,
         clientType: 1,
@@ -1194,7 +1694,7 @@ exports.getTrackerData = async (req, res) => {
         updatedProductName: 1,
         accountNumber: 1,
         requirement: 1,
-        updatedRequirement: 1,
+        
         accountNumberDigit: 1,
         bankCode: 1,
         clientCode: 1,
@@ -1213,6 +1713,7 @@ exports.getTrackerData = async (req, res) => {
         caseDoneBy: 1,
         clientTAT: 1,
         NameUploadBy: 1,
+        ReferBy:1,
         customerCare: 1,
         sentDate: 1,
         sentDateInDay: 1,
@@ -1242,10 +1743,10 @@ exports.getTrackerData = async (req, res) => {
         priority: 1,
         correctUPN: 1,
         product: 1,
-        updateProductName: 1,
+        updatedProductName: 1,
         accountNumber: 1,
         requirement: 1,
-        updatedRequirement: 1,
+        
         clientCode: 1,
         dateIn: 1,
         status: 1,
@@ -1256,8 +1757,10 @@ exports.getTrackerData = async (req, res) => {
         dateOut: 1,
         sentBy: 1,
         caseDoneBy: 1,
+        clientTAT: 1,
         customerCare: 1,
         NameUploadBy: 1,
+        ReferBy:1,
         sentDate: 1,
         isRechecked: 1
       };
@@ -2339,9 +2842,19 @@ exports.updaterequirement = async (req, res) => {
       dateInDate: getFormattedDateDay(),
       status: "Pending",
       caseStatus: "New Pending",
+      dateOut:"",
+      dateOutInDay:"",
+      sentBy:"",
+      clientTAT:"",
+      caseDoneBy:"",
+      sentDate:"",
+      sentDateInDay:"",
+      vendorStatus:"",
+      remarks:"",
+      attachments:[],
       isRechecked: true,
       recheckedAt: new Date(),
-      originalCaseId: record.caseId // Keep reference to original
+      originalCaseId: record.caseId 
     });
 
     await recheckedRecord.save();

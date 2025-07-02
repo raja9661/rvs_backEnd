@@ -1,8 +1,58 @@
-const {Product,ClientCode,Vendor} = require('../models/MappingItems');
+const {Product,ClientCode,Vendor,ManageClientCode} = require('../models/MappingItems');
 const User = require("../models/users");
 const KYCdoc = require('../models/kycModel');
+////////////////////****** Client code Management*/////////////////////////////////
 
+// Add new client code with type
+exports.addClientCodeandType = async (req, res) => {
+  try {
+    const { clientCode, clientType } = req.body;
+    
+    // Check if client code already exists
+    const existingCode = await ManageClientCode.findOne({ clientCode });
+    if (existingCode) {
+      return res.status(400).json({ message: 'Client code already exists' });
+    }
+    
+    const newCode = new ManageClientCode({ clientCode, clientType });
+    await newCode.save();
+    
+    res.status(201).json(newCode);
+  } catch (error) {
+    console.error('Error adding client code:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
+// Get all client codes
+exports.getAllClientCodes = async (req, res) => {
+  try {
+    const codes = await ManageClientCode.find().sort({ clientCode: 1 });
+    res.json(codes);
+  } catch (error) {
+    console.error('Error fetching client codes:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Delete a client code
+exports.deleteClientCode = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log("id:",id)
+    const deletedCode = await ManageClientCode.findByIdAndDelete(id);
+    
+    if (!deletedCode) {
+      return res.status(404).json({ message: 'Client code not found' });
+    }
+    
+    res.json({ message: 'Client code deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting client code:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+////////////////**** */////////////////////////////////////////////
 exports.getColumns = (req, res) => {
   try {
     // Extract schema paths and filter out internal fields
@@ -321,15 +371,30 @@ exports.editProduct =  async (req, res) => {
     }
   }
   // Controller
-exports.getClientCodes = async (req, res) => {
+
+  exports.getClientCodes = async (req, res) => {
   try {
-    const codes = await ClientCode.distinct("clientCode"); // Gets all unique codes
-    const flattenedCodes = codes.flat(); // Flatten nested arrays (since clientCode is [String])
-    res.json({ success: true, data: flattenedCodes });
+    // Since clientCode is now a single string, we can use distinct directly
+    const codes = await ManageClientCode.distinct("clientCode"); 
+    res.json({ success: true, data: codes });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to fetch client codes" });
+    console.error("Error fetching client codes:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch client codes",
+      error: error.message 
+    });
   }
 };
+// exports.getClientCodes = async (req, res) => {
+//   try {
+//     const codes = await ClientCode.distinct("clientCode"); // Gets all unique codes
+//     const flattenedCodes = codes.flat(); // Flatten nested arrays (since clientCode is [String])
+//     res.json({ success: true, data: flattenedCodes });
+//   } catch (error) {
+//     res.status(500).json({ success: false, message: "Failed to fetch client codes" });
+//   }
+// };
 
 ///////////////////****Vendor-Management *****////////////////  
 

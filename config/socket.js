@@ -60,7 +60,7 @@ function setupChangeListeners(io) {
   
   changeStream.on('change', async (change) => {
     try {
-      console.log('Detected database change, triggering updates');
+      // console.log('Detected database change, triggering updates');
       const sockets = await io.fetchSockets();
       const updateGroups = new Map();
       

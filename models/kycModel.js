@@ -38,6 +38,7 @@ const trackerSchema = new mongoose.Schema({
     vendorRate: { type: Number, default:"" },
     clientRate: { type: Number, default:"" },
     NameUploadBy: { type: String, default:"" },
+    ReferBy: { type: String, default:"" },
     isRechecked: { type: Boolean, default: false },
     recheckedAt: { type: Date },
     ipAddress:{ type: String, default: "" },
@@ -59,13 +60,5 @@ const trackerSchema = new mongoose.Schema({
       }],
 }, { timestamps: true });
 
-trackerSchema.pre('save', function(next) {
-  if (this.isNew) {
-    const date = new Date();
-    this.year = date.getFullYear().toString();
-    this.month = (date.getMonth() + 1).toString().padStart(2, '0');
-  }
-  next();
-});
 
 module.exports = mongoose.model("KYCdoc", trackerSchema);
