@@ -474,74 +474,108 @@ exports.getVendors = async (req, res) => {
 
 exports.getProductsforvandor = async (req, res) => {
     try {
-        const product = await Product.distinct("updatedProduct");
+        const product = await Product.distinct("productName");
         res.json(product);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 };
 
+
 // exports.addVendorProducts = async (req, res) => {
-//     const { vendorName, products } = req.body;
+//   const { vendorName, products, vendorType = 'other' } = req.body;
 
-//     try {
-//         // Check if the vendor already exists
-//         const existingVendor = await Vendor.findOne({ vendorName });
+//   try {
+//     const existingVendor = await Vendor.findOne({ vendorName, vendorType });
 
-//         if (existingVendor) {
-//             // Vendor exists, update its productName array
-//             const existingProducts = existingVendor.productName;
+//     if (existingVendor) {
+//       const existingProducts = existingVendor.productName;
+//       const newProducts = products.filter(
+//         product => !existingProducts.includes(product)
+//       );
 
-//             // Filter out products that are already assigned to the vendor
-//             const newProducts = products.filter(
-//                 (product) => !existingProducts.includes(product)
-//             );
-
-//             if (newProducts.length > 0) {
-//                 // Add only new products to the vendor's productName array
-//                 existingVendor.productName = [...existingProducts, ...newProducts];
-//                 await existingVendor.save();
-//                 res.status(200).json(existingVendor);
-//             } else {
-//                 // No new products to add
-//                 res.status(200).json({ message: "All products already assigned to the vendor." });
-//             }
-//         } else {
-//             // Vendor does not exist, create a new vendor entry
-//             const vendorProduct = new Vendor({ vendorName, productName: products });
-//             await vendorProduct.save();
-//             res.status(201).json(vendorProduct);
-//         }
-//     } catch (err) {
-//         res.status(400).json({ message: err.message });
+//       if (newProducts.length > 0) {
+//         existingVendor.productName = [...existingProducts, ...newProducts];
+//         await existingVendor.save();
+//         res.status(200).json(existingVendor);
+//       } else {
+//         res.status(200).json({ message: "All products already assigned to the vendor." });
+//       }
+//     } else {
+//       const vendorProduct = new Vendor({ vendorName, productName: products, vendorType });
+//       await vendorProduct.save();
+//       res.status(201).json(vendorProduct);
 //     }
+//   } catch (err) {
+//     res.status(400).json({ message: err.message });
+//   }
 // };
+
 exports.addVendorProducts = async (req, res) => {
   const { vendorName, products, vendorType = 'other' } = req.body;
 
   try {
+    // Check if any vendor already has any of these products with the same vendorType
+    const existingCombinations = await Vendor.find({
+      vendorType,
+      productName: { $in: products }
+    });
+
+    // Filter out products that already exist with this vendorType (regardless of vendorName)
+    const duplicateProducts = [];
+    const newProducts = products.filter(product => {
+      const isDuplicate = existingCombinations.some(vendor => 
+        vendor.productName.includes(product)
+      );
+      if (isDuplicate) {
+        duplicateProducts.push(product);
+        return false;
+      }
+      return true;
+    });
+
+    if (duplicateProducts.length > 0) {
+      return res.status(400).json({
+        message: `Some products already exist with vendorType '${vendorType}'`,
+        duplicates: duplicateProducts,
+        existingVendors: existingCombinations.map(v => v.vendorName)
+      });
+    }
+
+    // Check if vendor with this name and type already exists
     const existingVendor = await Vendor.findOne({ vendorName, vendorType });
 
     if (existingVendor) {
+      // Add only new products that aren't already assigned to this vendor
       const existingProducts = existingVendor.productName;
-      const newProducts = products.filter(
+      const vendorNewProducts = newProducts.filter(
         product => !existingProducts.includes(product)
       );
 
-      if (newProducts.length > 0) {
-        existingVendor.productName = [...existingProducts, ...newProducts];
+      if (vendorNewProducts.length > 0) {
+        existingVendor.productName = [...existingProducts, ...vendorNewProducts];
         await existingVendor.save();
-        res.status(200).json(existingVendor);
+        return res.status(200).json({
+          message: "Added new products to existing vendor",
+          vendor: existingVendor
+        });
       } else {
-        res.status(200).json({ message: "All products already assigned to the vendor." });
+        return res.status(200).json({ 
+          message: "All products already assigned to this vendor" 
+        });
       }
     } else {
-      const vendorProduct = new Vendor({ vendorName, productName: products, vendorType });
+      // Create new vendor with these products
+      const vendorProduct = new Vendor({ 
+        vendorName, 
+        productName: newProducts, 
+        vendorType 
+      });
       await vendorProduct.save();
-      res.status(201).json(vendorProduct);
+      return res.status(201).json(vendorProduct);
     }
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    return res.status(400).json({ message: err.message });
   }
 };
 

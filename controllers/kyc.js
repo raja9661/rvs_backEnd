@@ -293,7 +293,12 @@ exports.singleUpload = async (req, res) => {
       const employee = await User.findOne({ name: empName });
       customerCare = employee?.phoneNumber || "";
     }
-    const vendor = await Vendor.find({ productName: standardized.updatedName });
+    let vendor = await Vendor.find({ productName: product });
+     if(!vendor){
+       vendor = await Vendor.find({ productName: standardized.updatedName });
+     }
+    
+
     const vandorname = vendor[0]?.vendorName || "not found";
 
     let ipAddress = getIPAddress(req);
