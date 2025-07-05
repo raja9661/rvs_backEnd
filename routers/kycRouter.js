@@ -29,13 +29,18 @@ const {
     deleteAttachment,
     similarRecords,
     batchUpdate,
-    uploadSingleAttachment
+    uploadSingleAttachment,
+    getAvailableColumns,
+    getColumnConfig,
+    updateColumnConfig
+
 } = require("../controllers/kyc")
 
 
 const upload = require("../config/multer")
 
 const router = express.Router();
+
 
 router.post("/single-upload", singleUpload);
 router.post("/bulk-upload", bulkUpload);
@@ -46,6 +51,12 @@ router.post('/process-records/:fileKey', processRecords);
 router.post("/update-data", updateTrackerData);
 router.post("/recheck", updaterequirement);
 router.get("/tracker-data", getTrackerData);
+
+router.get("/columns/available", getAvailableColumns);
+router.get("/columns/config/:role", getColumnConfig);
+router.put("/columns/config/:role", updateColumnConfig);
+
+
 router.get("/single-tracker", singleTrackerData);
 router.get("/download-template", getTemplate);
 router.get("/getProductname", getProductname);

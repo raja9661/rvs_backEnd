@@ -613,11 +613,11 @@ exports.getVendorName = async (req, res) => {
 
 exports.updateVendorProducts = async (req, res) => {
     const { id } = req.params;
-    const { vendorName, products } = req.body;
+    const { vendorName, products,vendorType } = req.body;
     try {
         const updatedVendorProduct = await Vendor.findByIdAndUpdate(
             id,
-            { vendorName, productName:products },
+            { vendorName, productName:products,vendorType },
             { new: true }
         );
         res.json(updatedVendorProduct);
