@@ -39,7 +39,7 @@ exports.getAllClientCodes = async (req, res) => {
 exports.deleteClientCode = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log("id:",id)
+    // console.log("id:",id)
     const deletedCode = await ManageClientCode.findByIdAndDelete(id);
     
     if (!deletedCode) {
@@ -73,7 +73,7 @@ exports.getColumns = (req, res) => {
 // Add a single product
 exports.addSingle = async (req, res) => {
   const { productName, updatedProduct, correctUPN, productType, clientType, clientCode } = req.body;
-  console.log("hello")
+  // console.log("hello")
 
   try {
     // Check if the product already exists
@@ -83,7 +83,7 @@ exports.addSingle = async (req, res) => {
       correctUPN,
       productType,
     });
-    console.log("hello2")
+    // console.log("hello2")
     if (existingProduct) {
       return res.status(400).json({ message: 'All fields are already present. Skipping addition.' });
     }
@@ -95,7 +95,7 @@ exports.addSingle = async (req, res) => {
       correctUPN,
       productType,
     });
-    console.log("hello3")
+    // console.log("hello3")
 
     // Save the product to the database
     await newProduct.save();
@@ -209,7 +209,7 @@ exports.editProduct =  async (req, res) => {
   // Delete a product
   exports.deleteProducts =  async (req, res) => {
     const { id } = req.params;
-    console.log(id);
+    // console.log(id);
   
     try {
       const deletedProduct = await Product.findByIdAndDelete(id);
@@ -628,8 +628,8 @@ exports.updateVendorProducts = async (req, res) => {
 
 exports.removeProductFromVendor = async (req, res) => {
     const { vendorId, productName } = req.params;
-    console.log(vendorId)
-    console.log("hello")
+    // console.log(vendorId)
+    // console.log("hello")
 
     try {
         // Find the vendor by ID

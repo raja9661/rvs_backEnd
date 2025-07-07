@@ -13,7 +13,7 @@ const { ClientCode } = require('../models/MappingItems');
 exports.getDashboardData = async (req, res) => {
   try {
     const { role, user, clientCode } = req.body;
-    console.log("clientCode",clientCode)
+    // console.log("clientCode",clientCode)
     
     if (!role) {
       return res.status(400).json({ 

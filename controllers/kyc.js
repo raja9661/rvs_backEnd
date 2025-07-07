@@ -98,7 +98,7 @@ const findBestMatch = async (productName) => {
   if (results.length > 0) {
     // Return the best match (first result)
     const bestMatch = results[0].item;
-    console.log(bestMatch.correctUPN);
+    // console.log(bestMatch.correctUPN);
     return {
       updatedName: bestMatch.updatedProduct,
       upn: bestMatch.correctUPN,
@@ -162,13 +162,13 @@ const findBestMatch = async (productName) => {
 // };
 const getClientType = async (clientCode) => {
   if (!clientCode) return "UNKNOWN";
-  console.log(clientCode)
+  // console.log(clientCode)
 
   const cleanedCode = clientCode.trim().replace(/\s+/g, "").toUpperCase();
-  console.log(cleanedCode)
+  // console.log(cleanedCode)
   try {
     const record = await ManageClientCode.findOne({ clientCode: cleanedCode });
-    console.log(record)
+    // console.log(record)
     if (!record) {
       return "UNKNOWN";
     }
@@ -847,7 +847,7 @@ exports.uploadFile = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid user" });
     }
 
-    console.log("file key:",req.file.key)
+    // console.log("file key:",req.file.key)
     res.json({
       success: true,
       message: "File uploaded successfully",
@@ -899,7 +899,7 @@ exports.processRecords = async (req, res) => {
   try {
     const { fileKey } = req.params;
     const { userId, clientId, ipAddress,ReferBy } = req.body;
-    console.log("ReferBy",ReferBy)
+    // console.log("ReferBy",ReferBy)
 
     // Validate userId
     if (!userId) {
@@ -1617,7 +1617,7 @@ exports.getTrackerData = async (req, res) => {
     if (!columnOrder) {
       // Fallback to all fields if no config exists
       columnOrder = Object.keys(KYC.schema.paths).filter(
-        field => !['_id', '__v', 'createdAt', 'updatedAt'].includes(field)
+        field => !['_id', '__v', 'createdAt','userId', 'updatedAt'].includes(field)
       );
     }
     
@@ -1984,7 +1984,7 @@ exports.getTrackerData = async (req, res) => {
 exports.singleTrackerData = async (req, res) => {
   try {
     const { role, userId } = req.query;
-    console.log("Requested userId:", userId);
+    // console.log("Requested userId:", userId);
 
     let projection = {
       _id: 0,
@@ -3040,7 +3040,7 @@ exports.updaterequirement = async (req, res) => {
     });
 
     await recheckedRecord.save();
-    console.log("Rechecked record from backend:", recheckedRecord);
+    // console.log("Rechecked record from backend:", recheckedRecord);
     
     res.status(200).json({ 
       message: "Record rechecked successfully!",
@@ -3084,11 +3084,11 @@ exports.updaterequirement = async (req, res) => {
 
 exports.deleteRow = async (req, res) => {
   const { caseIds } = req.body;
-  console.log("Deleting caseIds:", caseIds);
+  // console.log("Deleting caseIds:", caseIds);
 
   try {
     if (!caseIds || !Array.isArray(caseIds)) {
-      console.log("caseIds array is required");
+      // console.log("caseIds array is required");
       return res
         .status(400)
         .json({ success: false, message: "caseIds array is required" });
@@ -3104,16 +3104,16 @@ exports.deleteRow = async (req, res) => {
 
     // Then delete from main collection
     const response = await KYC.deleteMany({ caseId: { $in: caseIds } });
-    console.log("Delete response:", response);
+    // console.log("Delete response:", response);
 
     if (response.deletedCount === 0) {
-      console.log("No records were deleted for caseIds:", caseIds);
+      // console.log("No records were deleted for caseIds:", caseIds);
       return res
         .status(400)
         .json({ success: false, message: "No records were deleted!" });
     }
 
-    console.log("Records deleted successfully:", response.deletedCount);
+    // console.log("Records deleted successfully:", response.deletedCount);
     return res.status(200).json({
       success: true,
       message: `${response.deletedCount} record(s) deleted successfully!`,
@@ -3517,7 +3517,7 @@ exports.uploadAttachment = async (req, res) => {
       }
     }
 
-    console.log("Parsed caseIds:", caseIds);
+    // console.log("Parsed caseIds:", caseIds);
     
     const file = req.file;
 
@@ -3706,7 +3706,7 @@ exports.getAttachments = async (req, res) => {
 exports.deleteAttachment = async (req, res) => {
   try {
     const { caseId, filename } = req.params;
-    console.log(`Attempting to delete attachment: ${filename} for case: ${caseId}`);
+    // console.log(`Attempting to delete attachment: ${filename} for case: ${caseId}`);
 
     // 1. Find the attachment first to get its details
     const kycDoc = await KYC.findOne(
@@ -3715,7 +3715,7 @@ exports.deleteAttachment = async (req, res) => {
     );
 
     if (!kycDoc?.attachments?.length) {
-      console.log('Attachment not found in database');
+      // console.log('Attachment not found in database');
       return res.status(404).json({ 
         success: false, 
         message: 'Attachment not found in database' 
@@ -3723,18 +3723,18 @@ exports.deleteAttachment = async (req, res) => {
     }
 
     const attachment = kycDoc.attachments[0];
-    console.log('Found attachment:', attachment);
+    // console.log('Found attachment:', attachment);
 
     // 2. Delete from S3 if key exists
     if (attachment.key) {
       try {
-        console.log(`Deleting from S3 with key: ${attachment.key}`);
+        // console.log(`Deleting from S3 with key: ${attachment.key}`);
         const deleteCommand = new DeleteObjectCommand({
           Bucket: process.env.AWS_BUCKET_NAME || 'rvsdoc',
           Key: attachment.key
         });
         await s3.send(deleteCommand);
-        console.log('Successfully deleted from S3');
+        // console.log('Successfully deleted from S3');
       } catch (s3Error) {
         console.error('S3 Delete Error:', s3Error);
         // Continue with DB deletion even if S3 deletion fails
@@ -3745,9 +3745,9 @@ exports.deleteAttachment = async (req, res) => {
       try {
         const filePath = path.resolve(attachment.path);
         if (fs.existsSync(filePath)) {
-          console.log(`Deleting local file at: ${filePath}`);
+          // console.log(`Deleting local file at: ${filePath}`);
           fs.unlinkSync(filePath);
-          console.log('Successfully deleted local file');
+          // console.log('Successfully deleted local file');
         }
       } catch (fsError) {
         console.error('File System Delete Error:', fsError);
@@ -3762,14 +3762,14 @@ exports.deleteAttachment = async (req, res) => {
     );
 
     if (updateResult.modifiedCount === 0) {
-      console.log('No document was modified - attachment may not exist');
+      // console.log('No document was modified - attachment may not exist');
       return res.status(404).json({ 
         success: false, 
         message: 'Attachment not found in database' 
       });
     }
 
-    console.log('Successfully deleted attachment from database');
+    // console.log('Successfully deleted attachment from database');
     res.json({ 
       success: true, 
       message: 'Attachment deleted successfully' 
@@ -3840,7 +3840,7 @@ exports.deleteAttachment = async (req, res) => {
 exports.similarRecords = async (req, res) => {
   try {
     const { statusFilter, caseStatusFilter, applyFilters, filters } = req.body;
-    console.log("hello")
+    // console.log("hello")
     
     // Base quezry
     let query = {

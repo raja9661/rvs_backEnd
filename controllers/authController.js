@@ -123,36 +123,36 @@ const getIPAddress = (req) => {
 
 exports.login = async (req, res) => {
   try {
-    console.log("Login request received:", req.body);
+    // console.log("Login request received:", req.body);
     
     const { userId, password } = req.body;
-    console.log("userId:",userId)
+    // console.log("userId:",userId)
     
     if (!userId) {
-      console.log("No email or userId provided");
+      // console.log("No email or userId provided");
       return res.status(400).json({ message: "Email or User ID is required" });
     }
 
     if (!password) {
-      console.log("No password provided");
+      // console.log("No password provided");
       return res.status(400).json({ message: "Password is required" });
     }
 
     const user = await User.findOne({ $or: [{ email:userId }, { userId:userId }] }).select('+password');
     
     if (!user) {
-      console.log("User not found with:", { email, userId });
+      // console.log("User not found with:", { email, userId });
       return res.status(404).json({ message: "User not found" });
     }
     if(user.isEnable === "disable"){
       return res.status(404).json({ message: "You Account is Disable please contact to Admin" });
     }
 
-    console.log("User found:", { id: user._id, email: user.email });
+    // console.log("User found:", { id: user._id, email: user.email });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      console.log("Password mismatch");
+      // console.log("Password mismatch");
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
@@ -212,8 +212,8 @@ exports.login = async (req, res) => {
 
 exports.logout = async (req, res) => {
   const { userId } = req.body;
-  console.log("hello")
-  console.log(userId)
+  // console.log("hello")
+  // console.log(userId)
   try {
     const user = await User.findOne({userId});
     if (!user) return res.status(404).json({ message: "User not found" });
