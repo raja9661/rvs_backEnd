@@ -8,6 +8,7 @@ const connectDB = async() => {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         })
+        console.log("Connected DB:", mongoose.connection.name); // should print "rvsdoc"
         console.log("✅ MongoDB Connected Successfully!");
     } catch (error) {
         console.error("❌ MongoDB Connection Error:", error.message);
