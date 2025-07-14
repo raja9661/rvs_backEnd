@@ -296,10 +296,12 @@ exports.singleUpload = async (req, res) => {
       customerCare = employee?.phoneNumber || "";
     }
     
-    const vendor = await Vendor.find({ productName: standardized.updatedName });
+    const vendor = await Vendor.findOne({
+      productName: standardized.updatedName,
+      vendorType: 'default'
+   });
     
-
-    const vandorname = vendor[0]?.vendorName || "not found";
+    const vandorname = vendor?.vendorName || "not found";
 
     let ipAddress = getIPAddress(req);
             if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
@@ -528,8 +530,12 @@ exports.bulkUpload = async (req, res) => {
         customerCare = employee?.phoneNumber || "";
       }
       
-      const vendor = await Vendor.findOne({ productName: standardized.updatedName });
-      const vandorname = vendor?.vendorName || "not found";
+      const vendor = await Vendor.findOne({
+      productName: standardized.updatedName,
+      vendorType: 'default'
+   });
+    
+    const vandorname = vendor?.vendorName || "not found";
 
       let ipAddress = getIPAddress(req);
       if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
@@ -1035,8 +1041,12 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
       };
 
       // Get vendor
-      const vendor = await Vendor.findOne({ productName: standardized.updatedName });
-      const vandorname = vendor?.vendorName || "not found";
+      const vendor = await Vendor.findOne({
+      productName: standardized.updatedName,
+      vendorType: 'default'
+   });
+    
+    const vandorname = vendor?.vendorName || "not found";
 
       // Create new record
       await KYC.create({
