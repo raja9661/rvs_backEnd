@@ -522,7 +522,7 @@ exports.addVendorProducts = async (req, res) => {
     // Only check product conflicts when vendorType is 'default'
     if (vendorType === 'default') {
       const existingProducts = await Vendor.find({
-        productName: { $in: products }
+        productName: { $in: products } , vendorType:"default"
       });
 
       const duplicateProducts = [];

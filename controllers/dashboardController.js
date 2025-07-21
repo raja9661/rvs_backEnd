@@ -118,7 +118,7 @@ exports.getCaseDetails = async (req, res) => {
     // Case type filters
     else if (type === 'New Pending') query.caseStatus = 'New Pending';
     else if (type === 'closed') query.status = 'Closed';
-    else if (type === 'highPriority') query.priority = 'High';
+    else if (type === 'highPriority') query.priority = 'Urgent';
     
     // Date filters (excluding today cases)
     if (type !== 'today') {

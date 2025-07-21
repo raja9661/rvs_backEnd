@@ -232,7 +232,7 @@ async function fetchDashboardStats(query, useCache = true, role, user, clientCod
     KYC.countDocuments(query),
     KYC.countDocuments({ ...query, createdAt: { $gte: todayStart, $lte: todayEnd } }),
     KYC.countDocuments({ ...query, caseStatus: "New Pending" }),
-    KYC.countDocuments({ ...query, priority: "High" }),
+    KYC.countDocuments({ ...query, priority: "Urgent" }),
     KYC.countDocuments({ ...query, status: "Closed" }),
     KYC.aggregate([
       { $match: query },
