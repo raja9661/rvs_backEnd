@@ -41,6 +41,7 @@ const DeletedItemsSchema = new mongoose.Schema({
     NameUploadBy: { type: String, default:"" },
     ReferBy: { type: String, default:"" },
     isRechecked: { type: Boolean, default: false },
+    isDedup: { type: Boolean, default: false },
     recheckedAt: { type: Date },
     ipAddress:{ type: String, default: "" },
     vendorStatus:{ type: String, default: "" },

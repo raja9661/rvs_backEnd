@@ -32,7 +32,8 @@ const {
     uploadSingleAttachment,
     getAvailableColumns,
     getColumnConfig,
-    updateColumnConfig
+    updateColumnConfig,
+    copyPasteDedup
 
 } = require("../controllers/kyc")
 
@@ -90,6 +91,7 @@ router.delete("/delete-attachment/:caseId/:filename", deleteAttachment);
 
 router.post('/find-similar-records', similarRecords);
 router.post('/batch-update', batchUpdate );
+router.post('/copy-paste-dedup', copyPasteDedup);
 
 
 

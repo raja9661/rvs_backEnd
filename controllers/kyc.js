@@ -264,6 +264,7 @@ exports.singleUpload = async (req, res) => {
       accountNumber,
       product,
       requirement,
+      clientCode:userclientcode,
       createdAt: {
         $gte: new Date(`${currentDate}T00:00:00Z`),
         $lt: new Date(`${currentDate}T23:59:59Z`),
@@ -286,6 +287,18 @@ exports.singleUpload = async (req, res) => {
       upn: "",
       productType: "",
     };
+    let isduplicate = false
+    if(standardized.productType === "ITO"){
+
+    const existingKYCRecords = await KYC.find({ accountNumber, updatedProductName:standardized.updatedName });
+    if (existingKYCRecords.length > 0) {
+      isduplicate = true
+    for (const record of existingKYCRecords) {
+    record.isDedup = true;
+    await record.save(); 
+  }
+}
+    }
 
     // Get additional data
     const employees = await ClientCode.find({ clientCode: userclientcode });
@@ -333,7 +346,8 @@ exports.singleUpload = async (req, res) => {
       ipAddress,
       ReferBy:ReferBy||"",
       year: date.getFullYear().toString(),
-      month: (date.getMonth() + 1).toString().padStart(2, '0')
+      month: (date.getMonth() + 1).toString().padStart(2, '0'),
+      isDedup:isduplicate
     });
 
     const response = await newKYC.save();
@@ -380,9 +394,9 @@ exports.bulkUpload = async (req, res) => {
     const dbKeys = [];
     const uniqueUserIds = new Set();
     const userIdClientCodeMap = new Map();
-    let ReferBy = "";
+    const clientCodeSet = new Set();
 
-    // Collect required data for bulk processing
+    // Preprocess and validate input
     for (const row of data) {
       const accountNumber = String(row.accountNumber || "").trim();
       const product = String(row.product || "").trim();
@@ -390,7 +404,7 @@ exports.bulkUpload = async (req, res) => {
       const name = String(row.name || "").trim();
       const userId = row.userId?.trim();
       const clientId = row.clientId?.trim();
-      ReferBy = row.ReferBy?.trim();
+      const ReferBy = row.ReferBy?.trim();
 
       if (!userId) {
         return res.status(400).json({ success: false, message: "User ID is required" });
@@ -402,15 +416,16 @@ exports.bulkUpload = async (req, res) => {
         continue;
       }
 
-      const key = `${accountNumber}-${product}-${requirement}`;
+      const key = `${accountNumber}-${product}-${requirement}-${clientId || ""}`;
       if (fileDuplicateTracker.has(key)) {
         results.fileDuplicates++;
         continue;
       }
       fileDuplicateTracker.add(key);
 
-      dbKeys.push({ accountNumber, product, requirement });
-      uniqueUserIds.add(userId);
+      dbKeys.push({ accountNumber, product, requirement, clientCode: clientId });
+      if (userId) uniqueUserIds.add(userId);
+      if (clientId) clientCodeSet.add(clientId);
 
       insertDocs.push({
         original: row,
@@ -421,29 +436,28 @@ exports.bulkUpload = async (req, res) => {
         requirement,
         userId,
         clientId,
+        ReferBy,
       });
     }
 
-    // 🔄 Step 1: Preload User Info
-    const users = await User.find({ 
+    // Step 1: Preload Users
+    const users = await User.find({
       $or: [
         { userId: { $in: Array.from(uniqueUserIds) } },
-        { clientCode: { $in: data.map(d => d.clientId).filter(Boolean) } }
+        { clientCode: { $in: Array.from(clientCodeSet) } }
       ]
     });
-    
     users.forEach(user => {
-      if (user.userId) {
-        userIdClientCodeMap.set(user.userId, user.clientCode);
-      }
+      if (user.userId) userIdClientCodeMap.set(user.userId, user.clientCode);
     });
 
-    // 🔄 Step 2: Preload Existing DB Records (same-day duplicates)
+    // Step 2: Preload same-day existing KYC records
     const existingRecords = await KYC.find({
       $or: dbKeys.map(key => ({
         accountNumber: key.accountNumber,
         product: key.product,
         requirement: key.requirement,
+        clientCode: key.clientCode,
         createdAt: {
           $gte: new Date(`${currentDate}T00:00:00Z`),
           $lt: new Date(`${currentDate}T23:59:59Z`),
@@ -452,10 +466,12 @@ exports.bulkUpload = async (req, res) => {
     });
 
     const existingSet = new Set(
-      existingRecords.map(r => `${r.accountNumber}-${r.product}-${r.requirement}`)
+      existingRecords.map(
+        r => `${r.accountNumber}-${r.product}-${r.requirement}-${r.clientCode}`
+      )
     );
 
-    // 🔄 Step 3: Process Data & Prepare for Bulk Insert
+    // Step 3: Process Data
     const bulkInsert = [];
 
     for (const item of insertDocs) {
@@ -467,27 +483,18 @@ exports.bulkUpload = async (req, res) => {
         requirement,
         userId,
         clientId,
+        ReferBy,
         key,
       } = item;
-
-      // Skip if exists in DB
-      if (existingSet.has(key)) {
-        results.dbDuplicates++;
-        continue;
-      }
 
       let userclientcode = "";
       let NameUploadBy = userId;
 
-      // Determine client code based on your new logic
       if (userId && clientId) {
         const user = users.find(u => u.clientCode === clientId);
         if (!user) {
           results.failed++;
-          results.failedRecords.push({ 
-            ...original, 
-            error: `No user found with client code ${clientId}` 
-          });
+          results.failedRecords.push({ ...original, error: `No user found with client code ${clientId}` });
           continue;
         }
         userclientcode = clientId;
@@ -495,25 +502,19 @@ exports.bulkUpload = async (req, res) => {
         const user = users.find(u => u.userId === userId);
         if (!user) {
           results.failed++;
-          results.failedRecords.push({ 
-            ...original, 
-            error: `No user found with userId ${userId}` 
-          });
+          results.failedRecords.push({ ...original, error: `No user found with userId ${userId}` });
           continue;
         }
         userclientcode = user.clientCode;
       }
 
-      if (!userclientcode) {
-        results.failed++;
-        results.failedRecords.push({ 
-          ...original, 
-          error: "Client code could not be determined" 
-        });
+      const uniqueKey = `${accountNumber}-${product}-${requirement}-${userclientcode}`;
+      if (existingSet.has(uniqueKey)) {
+        results.dbDuplicates++;
         continue;
       }
 
-      // Standardize product name
+      // Standardize product
       const bestMatch = await findBestMatch(product);
       const standardized = bestMatch || {
         updatedName: product,
@@ -521,7 +522,21 @@ exports.bulkUpload = async (req, res) => {
         productType: "",
       };
 
-      // Get additional data
+      let isduplicate = false;
+      if (standardized.productType === "ITO") {
+        const existingITO = await KYC.find({
+          accountNumber,
+          updatedProductName: standardized.updatedName,
+        });
+        if (existingITO.length > 0) {
+          isduplicate = true;
+          for (const record of existingITO) {
+            record.isDedup = true;
+            await record.save();
+          }
+        }
+      }
+
       const employees = await ClientCode.find({ clientCode: userclientcode });
       const empName = employees[0]?.EmployeeName || "";
       let customerCare = "";
@@ -529,23 +544,24 @@ exports.bulkUpload = async (req, res) => {
         const employee = await User.findOne({ name: empName });
         customerCare = employee?.phoneNumber || "";
       }
-      
+
       const vendor = await Vendor.findOne({
-      productName: standardized.updatedName,
-      vendorType: 'default'
-   });
-    
-    const vandorname = vendor?.vendorName || "not found";
+        productName: standardized.updatedName,
+        vendorType: 'default'
+      });
+      const vendorName = vendor?.vendorName || "not found";
 
       let ipAddress = getIPAddress(req);
       if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
         try {
           const ipRes = await axios.get("https://api64.ipify.org?format=json");
           ipAddress = ipRes.data.ip;
-        } catch (err) {
+        } catch {
           ipAddress = "unknown";
         }
       }
+
+      const date = new Date();
 
       bulkInsert.push({
         name,
@@ -563,29 +579,29 @@ exports.bulkUpload = async (req, res) => {
         clientCode: userclientcode,
         listByEmployee: empName,
         clientType: await getClientType(userclientcode),
-        vendorName: vandorname,
+        vendorName,
         customerCare,
         NameUploadBy,
         ipAddress,
-        ReferBy:ReferBy || "",
-        
-        year: new Date().getFullYear().toString(),
-        month: (new Date().getMonth() + 1).toString().padStart(2, '0')
+        ReferBy: ReferBy || "",
+        isDedup: isduplicate,
+        year: date.getFullYear().toString(),
+        month: (date.getMonth() + 1).toString().padStart(2, '0')
       });
     }
 
-    // 🔄 Step 4: Bulk Insert
+    // Step 4: Bulk Insert
     if (bulkInsert.length > 0) {
       await KYC.insertMany(bulkInsert);
       results.inserted = bulkInsert.length;
     }
 
-    // 🔄 Step 5: Final Response
+    // Step 5: Final response
     if (results.inserted === 0 && results.failed === data.length) {
       return res.status(400).json({
         success: false,
-        message: "Plese check client-code is assign with active client  ",
-        details: results, 
+        message: "Please check client-code is assigned with active client",
+        details: results,
       });
     }
 
@@ -610,6 +626,7 @@ exports.bulkUpload = async (req, res) => {
     });
   }
 };
+
 // exports.bulkUpload = async (req, res) => {
 //   try {
 //     const { data } = req.body;
@@ -634,8 +651,8 @@ exports.bulkUpload = async (req, res) => {
 //     const insertDocs = [];
 //     const dbKeys = [];
 //     const uniqueUserIds = new Set();
-//     const userIdNameMap = new Map();
 //     const userIdClientCodeMap = new Map();
+//     let ReferBy = "";
 
 //     // Collect required data for bulk processing
 //     for (const row of data) {
@@ -645,11 +662,11 @@ exports.bulkUpload = async (req, res) => {
 //       const name = String(row.name || "").trim();
 //       const userId = row.userId?.trim();
 //       const clientId = row.clientId?.trim();
+//       ReferBy = row.ReferBy?.trim();
 
 //       if (!userId) {
 //         return res.status(400).json({ success: false, message: "User ID is required" });
 //       }
-      
 
 //       if (!name || !accountNumber || !product || !requirement) {
 //         results.failed++;
@@ -665,7 +682,6 @@ exports.bulkUpload = async (req, res) => {
 //       fileDuplicateTracker.add(key);
 
 //       dbKeys.push({ accountNumber, product, requirement });
-
 //       uniqueUserIds.add(userId);
 
 //       insertDocs.push({
@@ -681,10 +697,17 @@ exports.bulkUpload = async (req, res) => {
 //     }
 
 //     // 🔄 Step 1: Preload User Info
-//     const users = await User.find({ userId: { $in: Array.from(uniqueUserIds) } });
+//     const users = await User.find({ 
+//       $or: [
+//         { userId: { $in: Array.from(uniqueUserIds) } },
+//         { clientCode: { $in: data.map(d => d.clientId).filter(Boolean) } }
+//       ]
+//     });
+    
 //     users.forEach(user => {
-//       userIdNameMap.set(user.userId, user.name);
-//       userIdClientCodeMap.set(user.userId, user.clientCode);
+//       if (user.userId) {
+//         userIdClientCodeMap.set(user.userId, user.clientCode);
+//       }
 //     });
 
 //     // 🔄 Step 2: Preload Existing DB Records (same-day duplicates)
@@ -725,8 +748,44 @@ exports.bulkUpload = async (req, res) => {
 //         continue;
 //       }
 
-//       const NameUploadBy = userIdNameMap.get(userId) || "";
+//       let userclientcode = "";
+//       let NameUploadBy = userId;
 
+//       // Determine client code based on your new logic
+//       if (userId && clientId) {
+//         const user = users.find(u => u.clientCode === clientId);
+//         if (!user) {
+//           results.failed++;
+//           results.failedRecords.push({ 
+//             ...original, 
+//             error: `No user found with client code ${clientId}` 
+//           });
+//           continue;
+//         }
+//         userclientcode = clientId;
+//       } else if (userId && !clientId) {
+//         const user = users.find(u => u.userId === userId);
+//         if (!user) {
+//           results.failed++;
+//           results.failedRecords.push({ 
+//             ...original, 
+//             error: `No user found with userId ${userId}` 
+//           });
+//           continue;
+//         }
+//         userclientcode = user.clientCode;
+//       }
+
+//       if (!userclientcode) {
+//         results.failed++;
+//         results.failedRecords.push({ 
+//           ...original, 
+//           error: "Client code could not be determined" 
+//         });
+//         continue;
+//       }
+
+//       // Standardize product name
 //       const bestMatch = await findBestMatch(product);
 //       const standardized = bestMatch || {
 //         updatedName: product,
@@ -734,30 +793,34 @@ exports.bulkUpload = async (req, res) => {
 //         productType: "",
 //       };
 
-//       let clientCode = await getClientCode(userId, clientId);
-//       if (!clientCode && clientId) {
-//         results.failed++;
-//         results.failedRecords.push({ ...original, error: "Invalid Client ID/Code" });
-//         continue;
+//       let isduplicate = false
+//     if(standardized.productType === "ITO"){
+
+//     const existingKYCRecords = await KYC.find({ accountNumber, updatedProductName:standardized.updatedName });
+//     if (existingKYCRecords.length > 0) {
+//       isduplicate = true
+//     for (const record of existingKYCRecords) {
+//     record.isDedup = true;
+//     await record.save(); 
+//   }
+// }
+//     }
+
+//       // Get additional data
+//       const employees = await ClientCode.find({ clientCode: userclientcode });
+//       const empName = employees[0]?.EmployeeName || "";
+//       let customerCare = "";
+//       if (empName) {
+//         const employee = await User.findOne({ name: empName });
+//         customerCare = employee?.phoneNumber || "";
 //       }
-
-//       if (!clientCode) {
-//         clientCode = userIdClientCodeMap.get(userId);
-//       }
-
-//       if (!clientCode) {
-//         results.failed++;
-//         results.failedRecords.push({ ...original, error: "Client code not found" });
-//         continue;
-//       }
-
-//       const empData = await ClientCode.findOne({ clientCode });
-//       const empName = empData?.EmployeeName || "";
-//       const employee = empName ? await User.findOne({ name: empName }) : null;
-//       const customerCare = employee?.phoneNumber || "";
-
-//       const vendor = await Vendor.findOne({ productName: standardized.updatedName });
-//       const vendorName = vendor?.vendorName || "not found";
+      
+//       const vendor = await Vendor.findOne({
+//       productName: standardized.updatedName,
+//       vendorType: 'default'
+//    });
+    
+//     const vandorname = vendor?.vendorName || "not found";
 
 //       let ipAddress = getIPAddress(req);
 //       if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
@@ -782,16 +845,18 @@ exports.bulkUpload = async (req, res) => {
 //         correctUPN: standardized.upn,
 //         productType: standardized.productType,
 //         updatedProductName: standardized.updatedName,
-//         clientCode,
+//         clientCode: userclientcode,
 //         listByEmployee: empName,
-//         clientType: await getClientType(clientCode),
-//         vendorName,
-//         createdAt: currentDate,
+//         clientType: await getClientType(userclientcode),
+//         vendorName: vandorname,
 //         customerCare,
 //         NameUploadBy,
 //         ipAddress,
-//         year: date.getFullYear().toString(),
-//         month: (date.getMonth() + 1).toString().padStart(2, '0')
+//         ReferBy:ReferBy || "",
+//         isDedup:isduplicate,
+        
+//         year: new Date().getFullYear().toString(),
+//         month: (new Date().getMonth() + 1).toString().padStart(2, '0')
 //       });
 //     }
 
@@ -805,8 +870,8 @@ exports.bulkUpload = async (req, res) => {
 //     if (results.inserted === 0 && results.failed === data.length) {
 //       return res.status(400).json({
 //         success: false,
-//         message: "No valid data to upload",
-//         details: results,
+//         message: "Plese check client-code is assign with active client  ",
+//         details: results, 
 //       });
 //     }
 
@@ -831,6 +896,8 @@ exports.bulkUpload = async (req, res) => {
 //     });
 //   }
 // };
+
+
 
 
 // Excel File Upload
@@ -961,7 +1028,8 @@ exports.processRecords = async (req, res) => {
         userclientcode, 
         ipAddress, 
         currentDate,
-        ReferBy
+        ReferBy,
+        userclientcode
       );
       
       results.inserted += batchResults.inserted;
@@ -981,7 +1049,7 @@ exports.processRecords = async (req, res) => {
   }
 };
 
-async function processBatch(batch, userId, userclientcode, ipAddress, currentDate,ReferBy) {
+async function processBatch(batch, userId, userclientcode, ipAddress, currentDate,ReferBy,userclientcode) {
   const results = {
     inserted: 0,
     duplicates: 0,
@@ -1021,6 +1089,7 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
         accountNumber,
         product,
         requirement,
+        clientCode:userclientcode,
         createdAt: {
           $gte: new Date(`${currentDate}T00:00:00Z`),
           $lt: new Date(`${currentDate}T23:59:59Z`),
@@ -1039,6 +1108,19 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
         upn: "",
         productType: "",
       };
+
+      let isduplicate = false
+    if(standardized.productType === "ITO"){
+
+    const existingKYCRecords = await KYC.find({ accountNumber, updatedProductName:standardized.updatedName });
+    if (existingKYCRecords.length > 0) {
+      isduplicate = true
+    for (const record of existingKYCRecords) {
+    record.isDedup = true;
+    await record.save(); 
+  }
+}
+    }
 
       // Get vendor
       const vendor = await Vendor.findOne({
@@ -1072,7 +1154,8 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
         ipAddress,
         ReferBy:ReferBy || "",
         year: new Date().getFullYear().toString(),
-        month: (new Date().getMonth() + 1).toString().padStart(2, '0')
+        month: (new Date().getMonth() + 1).toString().padStart(2, '0'),
+        isDedup:isduplicate
       });
 
       results.inserted++;
@@ -3147,7 +3230,7 @@ exports.deletedItems = async (req, res) => {
     }
     // Add other role-based filters as needed
 
-    const deletedItems = await DeletedItems.find(query);
+    const deletedItems = await DeletedItems.find(query).sort({ _id: -1 });;
     res.status(200).json(deletedItems);
   } catch (error) {
     console.error("Error fetching deleted items:", error);
@@ -4004,41 +4087,30 @@ exports.deleteAttachment = async (req, res) => {
 // New endpoint for batch deduce
 exports.similarRecords = async (req, res) => {
   try {
-    const { statusFilter, caseStatusFilter, applyFilters, filters } = req.body;
-    // console.log("hello")
+    const records = await KYC.find({isDedup: true}).sort({ _id: -1 });
     
-    // Base quezry
-    let query = {
-      $or: [
-        { status: { $in: statusFilter } },
-        { caseStatus: { $in: caseStatusFilter } }
-      ]
-    };
-    
-    // Apply additional filters if requested
-    if (applyFilters) {
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) {
-          query[key] = new RegExp(value, 'i');
-        }
-      });
-    }
-    
-    // Find matching records
-    const records = await KYC.find(query);
-    
-    // Group by product, accountNumber, requirement
+    // Group by product and accountNumber
     const grouped = {};
     records.forEach(record => {
-      const key = `${record.product}|${record.accountNumber}|${record.requirement}`;
+      const key = `${record.updatedProductName}|${record.accountNumber}`;
       if (!grouped[key]) {
         grouped[key] = [];
       }
       grouped[key].push(record);
     });
     
-    // Filter groups with duplicates
-    const duplicates = Object.values(grouped).filter(group => group.length > 1);
+    // Filter groups with duplicates and apply alternating colors
+    const duplicates = Object.values(grouped)
+      .filter(group => group.length > 1)
+      .map((group, groupIndex) => {
+        return group.map((record, recordIndex) => {
+          // Add color flag for frontend highlighting
+          return {
+            ...record._doc,
+            _dedupColor: (groupIndex + recordIndex) % 2 === 0 ? 'blue' : 'green'
+          };
+        });
+      });
     
     res.json({
       success: true,
@@ -4054,10 +4126,116 @@ exports.similarRecords = async (req, res) => {
   }
 };
 
+exports.copyPasteDedup = async (req, res) => {
+  try {
+    const { sourceId, targetIds, fields, userId, userName } = req.body; // changed `targetId` to `targetIds`
+
+    const source = await KYC.findOne({ caseId: sourceId });
+    if (!source) {
+      return res.status(404).json({ success: false, message: "Source record not found" });
+    }
+
+    // Validate source is dedup
+    if (!source.isDedup) {
+      return res.status(400).json({ success: false, message: "Source record must be a dedup record" });
+    }
+
+    const updates = {};
+    fields.forEach(field => {
+      if (source[field] !== undefined) {
+        updates[field] = source[field];
+      }
+    });
+
+    updates.dedupBy = userName;
+    updates.updatedAt = new Date();
+
+    const updatedRecords = [];
+
+    for (const targetId of targetIds) {
+      if (targetId === sourceId) continue; // Skip if same as source
+
+      const target = await KYC.findOne({ caseId: targetId });
+
+      if (target && target.isDedup) {
+        const updated = await KYC.findOneAndUpdate(
+          { caseId: targetId },
+          { $set: updates },
+          { new: true }
+        );
+        updatedRecords.push(updated);
+      }
+    }
+
+    res.json({
+      success: true,
+      updatedRecords
+    });
+  } catch (error) {
+    console.error("Copy-paste error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
 
 
-
-// Enhanced batch update with proper TAT calculation
+// exports.copyPasteDedup = async (req, res) => {
+//   try {
+//     const { sourceId, targetId, fields, userId, userName } = req.body;
+    
+//     // Get source record
+//     const source = await KYC.findOne({caseId: sourceId});
+//     if (!source) {
+//       return res.status(404).json({ success: false, message: "Source record not found" });
+//     }
+    
+//     // Get target record
+//     const target = await KYC.findOne({caseId: targetId});
+//     if (!target) {
+//       return res.status(404).json({ success: false, message: "Target record not found" });
+//     }
+    
+//     // Validate both are dedup records
+//     if (!source.isDedup || !target.isDedup) {
+//       return res.status(400).json({ 
+//         success: false, 
+//         message: "Both records must be dedup records" 
+//       });
+//     }
+    
+//     // Copy specified fields
+//     const updates = {};
+//     fields.forEach(field => {
+//       if (source[field] !== undefined) {
+//         updates[field] = source[field];
+//       }
+//     });
+    
+//     // Add dedupBy info
+//     updates.dedupBy = userName;
+//     updates.updatedAt = new Date();
+    
+//     // Update target record
+//     const updated = await KYC.findOneAndUpdate(
+//       {caseId: targetId},
+//       { $set: updates },
+//       { new: true }
+//     );
+    
+//     res.json({
+//       success: true,
+//       updatedRecord: updated
+//     });
+//   } catch (error) {
+//     console.error("Copy-paste error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+//   }
+// };
 
 
 
