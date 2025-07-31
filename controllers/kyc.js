@@ -3112,6 +3112,9 @@ exports.updaterequirement = async (req, res) => {
       ...record.toObject(),
       _id: undefined, // Let MongoDB create a new ID
       caseId: generateCaseId(),
+      details: '',
+      details1: '',
+      priority: '',
       requirement: req.body.requirement,
       dateIn: getFormattedDateTime(),
       dateInDate: getFormattedDateDay(),
@@ -4126,51 +4129,47 @@ exports.similarRecords = async (req, res) => {
   }
 };
 
+
 exports.copyPasteDedup = async (req, res) => {
   try {
-    const { sourceId, targetIds, fields, userId, userName } = req.body; // changed `targetId` to `targetIds`
+    const { sourceRecordToCopy, targetIds, userId, userName } = req.body;
+    console.log("sourceRecordToCopy:",sourceRecordToCopy)
 
-    const source = await KYC.findOne({ caseId: sourceId });
-    if (!source) {
-      return res.status(404).json({ success: false, message: "Source record not found" });
-    }
+    const currentDate = new Date();
+    const todayString = currentDate.toISOString().split('T')[0]; // yyyy-mm-dd
 
-    // Validate source is dedup
-    if (!source.isDedup) {
-      return res.status(400).json({ success: false, message: "Source record must be a dedup record" });
-    }
-
-    const updates = {};
-    fields.forEach(field => {
-      if (source[field] !== undefined) {
-        updates[field] = source[field];
-      }
-    });
-
-    updates.dedupBy = userName;
-    updates.updatedAt = new Date();
+    const updates = {
+      attachments:sourceRecordToCopy.attachments,
+      details:sourceRecordToCopy.details,
+      details1:sourceRecordToCopy.details1,
+      status: "Closed",
+      caseStatus: "Sent",
+      vendorName: userName,
+      sentDate: getFormattedDateTime(),
+      sentDateInDay: getFormattedDateDay(),
+      dateOut: getFormattedDateTime(),
+      dateOutInDay: getFormattedDateDay(),
+      caseDoneBy: userName,
+      dedupBy: userName,
+      vendorStatus: "Closed",
+      sentBy:userName,
+      
+    };
 
     const updatedRecords = [];
 
     for (const targetId of targetIds) {
-      if (targetId === sourceId) continue; // Skip if same as source
-
-      const target = await KYC.findOne({ caseId: targetId });
-
-      if (target && target.isDedup) {
-        const updated = await KYC.findOneAndUpdate(
-          { caseId: targetId },
-          { $set: updates },
-          { new: true }
-        );
+      const updated = await KYC.findOneAndUpdate(
+        { caseId: targetId },
+        { $set: updates },
+        { new: true }
+      );
+      if (updated) {
         updatedRecords.push(updated);
       }
     }
 
-    res.json({
-      success: true,
-      updatedRecords
-    });
+    res.json({ success: true, updatedRecords });
   } catch (error) {
     console.error("Copy-paste error:", error);
     res.status(500).json({
@@ -4183,50 +4182,48 @@ exports.copyPasteDedup = async (req, res) => {
 
 // exports.copyPasteDedup = async (req, res) => {
 //   try {
-//     const { sourceId, targetId, fields, userId, userName } = req.body;
-    
-//     // Get source record
-//     const source = await KYC.findOne({caseId: sourceId});
+//     const { sourceId, targetIds, fields, userId, userName } = req.body; // changed `targetId` to `targetIds`
+
+//     const source = await KYC.findOne({ caseId: sourceId });
 //     if (!source) {
 //       return res.status(404).json({ success: false, message: "Source record not found" });
 //     }
-    
-//     // Get target record
-//     const target = await KYC.findOne({caseId: targetId});
-//     if (!target) {
-//       return res.status(404).json({ success: false, message: "Target record not found" });
+
+//     // Validate source is dedup
+//     if (!source.isDedup) {
+//       return res.status(400).json({ success: false, message: "Source record must be a dedup record" });
 //     }
-    
-//     // Validate both are dedup records
-//     if (!source.isDedup || !target.isDedup) {
-//       return res.status(400).json({ 
-//         success: false, 
-//         message: "Both records must be dedup records" 
-//       });
-//     }
-    
-//     // Copy specified fields
+
 //     const updates = {};
 //     fields.forEach(field => {
 //       if (source[field] !== undefined) {
 //         updates[field] = source[field];
 //       }
 //     });
-    
-//     // Add dedupBy info
+
 //     updates.dedupBy = userName;
 //     updates.updatedAt = new Date();
-    
-//     // Update target record
-//     const updated = await KYC.findOneAndUpdate(
-//       {caseId: targetId},
-//       { $set: updates },
-//       { new: true }
-//     );
-    
+
+//     const updatedRecords = [];
+
+//     for (const targetId of targetIds) {
+//       if (targetId === sourceId) continue; // Skip if same as source
+
+//       const target = await KYC.findOne({ caseId: targetId });
+
+//       if (target && target.isDedup) {
+//         const updated = await KYC.findOneAndUpdate(
+//           { caseId: targetId },
+//           { $set: updates },
+//           { new: true }
+//         );
+//         updatedRecords.push(updated);
+//       }
+//     }
+
 //     res.json({
 //       success: true,
-//       updatedRecord: updated
+//       updatedRecords
 //     });
 //   } catch (error) {
 //     console.error("Copy-paste error:", error);
@@ -4236,8 +4233,6 @@ exports.copyPasteDedup = async (req, res) => {
 //     });
 //   }
 // };
-
-
 
 function calculateTAT(sentDateStr, dateOutStr) {
   const format = "DD-MM-YYYY, h:mm:ss A";

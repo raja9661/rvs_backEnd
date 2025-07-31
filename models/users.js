@@ -5,6 +5,10 @@ const getFormattedDateTime = () => {
   return moment().tz("Asia/Kolkata").format("DD-MM-YYYY, hh:mm:ss A");
 };
 
+const getFormattedDateDay = () => {
+  return moment().format("DD-MM-YYYY, dddd");
+};
+
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
 
@@ -51,7 +55,8 @@ const userSchema = new mongoose.Schema({
     },
   ],
 
-  createdAt: { type: String, default: getFormattedDateTime() }
+  createdAt: { type: String, default: getFormattedDateTime() },
+  createdDay: { type: String, default: getFormattedDateDay() }
 });
 
 
