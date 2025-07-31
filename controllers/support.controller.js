@@ -40,57 +40,9 @@ const deleteFromS3 = async (attachments) => {
 
 
 
-exports.createIssue = async (req, res) => {
-  try {
-    const { title, description } = req.body;
-
-    const attachments = req.files?.map(file => ({
-      filename: file.originalname,
-      url: file.location,
-      key: file.key,
-      bucket: file.bucket,
-      mimetype: file.mimetype,
-      size: file.size,
-    })) || [];
-
-    const issue = new SupportIssue({
-      title,
-      description,
-      attachments,
-    });
-
-    await issue.save();
-    
-
-    await sendEmail({
-      sendTo: 'ufs_support@rvsdoc.com',
-       subject : "ISSUE",
-            html : issueTemplate({
-                sub : title,
-                issue : description
-            }),
-      attachments: attachments.map(file => ({
-        filename: file.filename,
-        url: file.url,
-      }))
-    });
-
-    res.status(201).json({ success: true, issue });
-  } catch (error) {
-    console.error("Create Issue Error:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to create issue",
-      details: error.message,
-    });
-  }
-};
-
-
 // exports.createIssue = async (req, res) => {
 //   try {
 //     const { title, description } = req.body;
-//     // const createdBy = req.user._id;
 
 //     const attachments = req.files?.map(file => ({
 //       filename: file.originalname,
@@ -99,56 +51,104 @@ exports.createIssue = async (req, res) => {
 //       bucket: file.bucket,
 //       mimetype: file.mimetype,
 //       size: file.size,
-//     }));
+//     })) || [];
 
 //     const issue = new SupportIssue({
 //       title,
 //       description,
 //       attachments,
-//       // createdBy
 //     });
 
 //     await issue.save();
+    
 
-//     // Send email with attachments
-//     const transporter = nodemailer.createTransport({
-//       service: "Gmail",
-//       auth: {
-//         user: process.env.EMAIL,
-//         pass: process.env.PASSWORD,
-//       },
-//     });
-
-//     const mailOptions = {
-//       from: `Support System <${process.env.EMAIL}>`,
-//       to: "info@rvsdoc.com",
-//       subject: `[SUPPORT] ${title}`,
-//       html: `
-//         <h2>New Support Issue</h2>
-//         <p><strong>Title:</strong> ${title}</p>
-//         <p><strong>Description:</strong></p>
-//         <div style="background:#f5f5f5;padding:1rem;border-radius:4px;">
-//           ${description.replace(/\n/g, '<br>')}
-//         </div>
-//       `,
-//       attachments: attachments?.map(file => ({
+//     await sendEmail({
+//       sendTo: 'ufs_support@rvsdoc.com',
+//        subject : "ISSUE",
+//             html : issueTemplate({
+//                 sub : title,
+//                 issue : description
+//             }),
+//       attachments: attachments.map(file => ({
 //         filename: file.filename,
-//         path: file.url
-//       })) || []
-//     };
-
-//     await transporter.sendMail(mailOptions);
+//         url: file.url,
+//       }))
+//     });
 
 //     res.status(201).json({ success: true, issue });
 //   } catch (error) {
 //     console.error("Create Issue Error:", error);
-//     res.status(500).json({ 
-//       success: false, 
+//     res.status(500).json({
+//       success: false,
 //       error: "Failed to create issue",
-//       details: error.message 
+//       details: error.message,
 //     });
 //   }
 // };
+
+
+exports.createIssue = async (req, res) => {
+  try {
+    const { title, description } = req.body;
+    // const createdBy = req.user._id;
+
+    const attachments = req.files?.map(file => ({
+      filename: file.originalname,
+      url: file.location,
+      key: file.key,
+      bucket: file.bucket,
+      mimetype: file.mimetype,
+      size: file.size,
+    }));
+
+    const issue = new SupportIssue({
+      title,
+      description,
+      attachments,
+      // createdBy
+    });
+
+    await issue.save();
+
+    // Send email with attachments
+    const transporter = nodemailer.createTransport({
+      service: "Gmail",
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.PASSWORD,
+      },
+    });
+
+    const mailOptions = {
+      from: `Support System <${process.env.EMAIL}>`,
+      to: "info@rvsdoc.com",
+      subject: `[SUPPORT] ${title}`,
+      html: `
+        <h2>New Support Issue</h2>
+        <p><strong>Title:</strong> ${title}</p>
+        <p><strong>Description:</strong></p>
+        <div style="background:#f5f5f5;padding:1rem;border-radius:4px;">
+          ${description.replace(/\n/g, '<br>')}
+        </div>
+      `,
+      attachments: attachments?.map(file => ({
+        filename: file.filename,
+        path: file.url
+      })) || []
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(201).json({ success: true, issue });
+  } catch (error) {
+    console.error("Create Issue Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      error: "Failed to create issue",
+      details: error.message 
+    });
+  }
+};
 
 // Get all issues for current user
 exports.getAllIssues = async (req, res) => {
