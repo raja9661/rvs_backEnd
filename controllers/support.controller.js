@@ -1,10 +1,13 @@
 const SupportIssue = require("../models/supportIssue.model");
 const { DeleteObjectCommand, S3Client } = require("@aws-sdk/client-s3");
 const nodemailer = require("nodemailer");
-require("dotenv").config();
 const s3Client = require('../config/s3Config');
 const sendEmail = require("../config/sendEmail");
-const issueTemplate = require("../utils/issueTemplate")
+const issueTemplate = require("../utils/issueTemplate");
+
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 
 // const s3Client = new S3Client({

@@ -1,6 +1,9 @@
 
-require("dotenv").config();
+
 const { Resend } = require("resend");
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 
 if(!process.env.RESEND_API_KEY){
