@@ -6,7 +6,7 @@ const getFormattedDateTime = () => {
 };
 
 const getFormattedDateDay = () => {
-  return moment().format("DD-MM-YYYY, dddd");
+  return moment().tz("Asia/Kolkata").format("DD-MM-YYYY, dddd");
 };
 
 const userSchema = new mongoose.Schema({

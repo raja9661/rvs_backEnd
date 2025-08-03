@@ -38,11 +38,13 @@ const getFormattedDateTime = () => {
   return moment().tz("Asia/Kolkata").format("DD-MM-YYYY, hh:mm:ss A");
 };
 
-
-
 const getFormattedDateDay = () => {
-  return moment().format("DD-MM-YYYY, dddd");
+  return moment().tz("Asia/Kolkata").format("DD-MM-YYYY, dddd");
 };
+
+// const getFormattedDateDay = () => {
+//   return moment().format("DD-MM-YYYY, dddd");
+// };
 
 // // Function to get Date and Time
 // const getFormattedDateTime = () => {
@@ -290,7 +292,7 @@ exports.singleUpload = async (req, res) => {
     let isduplicate = false
     if(standardized.productType === "ITO"){
 
-    const existingKYCRecords = await KYC.find({ accountNumber, updatedProductName:standardized.updatedName });
+    const existingKYCRecords = await KYC.find({ accountNumber, product });
     if (existingKYCRecords.length > 0) {
       isduplicate = true
     for (const record of existingKYCRecords) {
@@ -526,7 +528,7 @@ exports.bulkUpload = async (req, res) => {
       if (standardized.productType === "ITO") {
         const existingITO = await KYC.find({
           accountNumber,
-          updatedProductName: standardized.updatedName,
+          product,
         });
         if (existingITO.length > 0) {
           isduplicate = true;
@@ -1112,7 +1114,7 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
       let isduplicate = false
     if(standardized.productType === "ITO"){
 
-    const existingKYCRecords = await KYC.find({ accountNumber, updatedProductName:standardized.updatedName });
+    const existingKYCRecords = await KYC.find({ accountNumber, product });
     if (existingKYCRecords.length > 0) {
       isduplicate = true
     for (const record of existingKYCRecords) {

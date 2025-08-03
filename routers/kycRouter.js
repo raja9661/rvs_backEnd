@@ -23,7 +23,7 @@ const {
     sendManualUpdate,
     getCaseDetails,
     getVerificationTrendsData,
-    uploadAttachment,
+    // uploadAttachment,
     downloadAttachment ,
     getAttachments,
     deleteAttachment,
@@ -82,7 +82,7 @@ router.get('/dashboard/case-details', getCaseDetails);
 
 
 
-router.post("/upload-attachment", upload.single("file"), uploadAttachment);
+// router.post("/upload-attachment", upload.single("file"), uploadAttachment);
 router.post("/upload-single", upload.single("file"), uploadSingleAttachment);
 router.get("/attachments", getAttachments);
 router.get("/download-attachment/:caseId/:filename", downloadAttachment);

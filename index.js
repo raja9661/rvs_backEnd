@@ -17,6 +17,7 @@ const LiveDashRoute = require('./routers/dashboardRoutes');
 const AboutUs = require('./routers/aboutUsRouter');
 const support = require('./routers/support.routes');
 const columnConfigRoutes = require("./controllers/columnController");
+const uploadAttachmentRoutes = require("./routers/attachmentUploadRouter");
 
 
 
@@ -82,8 +83,9 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+
+
 // app.use(bodyParser.json());
 
 
@@ -94,8 +96,14 @@ app.use(express.urlencoded({ extended: true }));
 // app.use(express.static(frontendBuildPath));
 
 
-app.use('/api/auth', authRouter);
+
+app.use('/api/upload', uploadAttachmentRoutes);
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 app.use('/api/kyc', kycRoutes);
+app.use('/api/auth', authRouter);
 app.use('/api/access', accessManager);
 app.use('/api/mapping', Mapping);
 app.use('/api/dashboard', LiveDashRoute);
@@ -104,6 +112,14 @@ app.use('/api/support', support);
 app.use("/column-config", columnConfigRoutes);
 
 
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '1.0.0'
+  });
+});
 
 
 app.get('*', (req, res) => {
