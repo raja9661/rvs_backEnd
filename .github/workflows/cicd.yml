@@ -1,173 +1,278 @@
-name: Deploy Node Application
+name: Deploy Backend to EC2
+
 on:
   push:
     branches:
       - main
+    paths:
+      - backend/**
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Source
-        uses: actions/checkout@v4
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_PASS }}
-      - name: Build Docker Image
-        run: docker build -t raja9661/rvs_backend:latest .
-      - name: Publish Image to Docker Hub
-        run: docker push raja9661/rvs_backend:latest
-
   deploy:
-    needs: build
-    runs-on: self-hosted
+    name: Deploy Backend to EC2
+    runs-on: ubuntu-latest
+
     steps:
-      - name: Check Initial Disk Usage
-        run: df -h
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Free Disk Space Aggressively
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
+
+      - name: Build and push Docker image
         run: |
-          echo "----- Cleaning disk -----"
-          echo "Before cleanup:"
-          df -h
-          # Only clean unused resources, keep running containers
-          docker image prune -af
-          docker container prune -f
-          docker volume prune -af
-          docker builder prune -af
-          sudo rm -rf /root/.npm ~/.npm ~/.cache /tmp/* || true
-          sudo journalctl --vacuum-time=1d || true
-          echo "After cleanup:"
-          df -h
+          docker build -t ${{ secrets.DOCKER_USER }}/rvs_backend:latest ./backend
+          docker push ${{ secrets.DOCKER_USER }}/rvs_backend:latest
 
-      - name: Pull image from Docker Hub
-        run: docker pull raja9661/rvs_backend:latest
+      - name: Connect to EC2 and deploy container
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_KEY }}
+          script_stop: true
+          script: |
+            echo "Pulling latest image..."
+            docker pull ${{ secrets.DOCKER_USER }}/rvs_backend:latest
 
-      - name: Determine current active container and ports
-        id: deployment
-        run: |
-          # Check which container is currently running on port 8080
-          if docker ps --format "table {{.Names}}\t{{.Ports}}" | grep -q "nodejs-container.*8080"; then
-            echo "Current active: nodejs-container on 8080"
-            echo "active_container=nodejs-container" >> $GITHUB_OUTPUT
-            echo "inactive_container=nodejs-container-blue" >> $GITHUB_OUTPUT
-            echo "new_port=8081" >> $GITHUB_OUTPUT
-            echo "active_port=8080" >> $GITHUB_OUTPUT
-          elif docker ps --format "table {{.Names}}\t{{.Ports}}" | grep -q "nodejs-container-blue.*8081"; then
-            echo "Current active: nodejs-container-blue on 8081"
-            echo "active_container=nodejs-container-blue" >> $GITHUB_OUTPUT
-            echo "inactive_container=nodejs-container" >> $GITHUB_OUTPUT
-            echo "new_port=8080" >> $GITHUB_OUTPUT
-            echo "active_port=8081" >> $GITHUB_OUTPUT
-          else
-            echo "No active container found, starting fresh"
-            echo "active_container=" >> $GITHUB_OUTPUT
-            echo "inactive_container=nodejs-container" >> $GITHUB_OUTPUT
-            echo "new_port=8080" >> $GITHUB_OUTPUT
-            echo "active_port=" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Stop and remove inactive container
-        run: |
-          if [ -n "${{ steps.deployment.outputs.inactive_container }}" ]; then
-            docker stop ${{ steps.deployment.outputs.inactive_container }} || true
-            docker rm ${{ steps.deployment.outputs.inactive_container }} || true
-          fi
-
-      - name: Start new container
-        run: |
-          echo "Starting new container: ${{ steps.deployment.outputs.inactive_container }} on port ${{ steps.deployment.outputs.new_port }}"
-          docker run -d \
-            --name ${{ steps.deployment.outputs.inactive_container }} \
-            -p ${{ steps.deployment.outputs.new_port }}:8080 \
-            -e MONGO_URL="${{ secrets.MONGO_URL }}" \
-            -e PORT="${{ secrets.PORT }}" \
-            -e EMAIL="${{ secrets.EMAIL }}" \
-            -e PASSWORD="${{ secrets.PASSWORD }}" \
-            -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
-            -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
-            -e AWS_REGION="${{ secrets.AWS_REGION }}" \
-            -e AWS_BUCKET_NAME="${{ secrets.AWS_BUCKET_NAME }}" \
-            -e DOCKER_USER="${{ secrets.DOCKER_USER }}" \
-            -e DOCKER_PASS="${{ secrets.DOCKER_PASS }}" \
-            -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
-            --restart unless-stopped \
-            raja9661/rvs_backend:latest
-
-      - name: Wait for new container to be healthy
-        run: |
-          echo "Waiting for new container to be ready..."
-          sleep 15
-          for i in {1..24}; do
-            if curl -f http://localhost:${{ steps.deployment.outputs.new_port }}/api/health 2>/dev/null || curl -f http://localhost:${{ steps.deployment.outputs.new_port }}/ 2>/dev/null; then
-              echo "✅ New container is healthy!"
-              break
-            elif [ $i -eq 24 ]; then
-              echo "❌ Health check failed after 24 attempts (2 minutes)"
-              echo "Container logs:"
-              docker logs ${{ steps.deployment.outputs.inactive_container }}
-              docker stop ${{ steps.deployment.outputs.inactive_container }}
-              docker rm ${{ steps.deployment.outputs.inactive_container }}
-              exit 1
+            echo "Determining current running port..."
+            CURRENT_PORT=$(docker ps --filter "name=backend-blue" --format "{{.Ports}}" | grep -oP '0.0.0.0:\K[0-9]+(?=->8080)' || echo "")
+            if [ "$CURRENT_PORT" == "8080" ]; then
+              NEW_PORT=8081
+              INACTIVE_CONTAINER=backend-green
+              ACTIVE_CONTAINER=backend-blue
             else
-              echo "Attempt $i: Container not ready yet, waiting 5s..."
-              sleep 5
+              NEW_PORT=8080
+              INACTIVE_CONTAINER=backend-blue
+              ACTIVE_CONTAINER=backend-green
             fi
-          done
 
-      - name: Update nginx upstream configuration
-        run: |
-          echo "Updating nginx upstream configuration..."
-          # Create a script to swap the upstream servers
-          cat > /tmp/update_upstream.sh << 'EOF'
-          #!/bin/bash
+            echo "ACTIVE_CONTAINER=$ACTIVE_CONTAINER" >> $GITHUB_ENV
+            echo "INACTIVE_CONTAINER=$INACTIVE_CONTAINER" >> $GITHUB_ENV
+            echo "NEW_PORT=$NEW_PORT" >> $GITHUB_ENV
 
-          NEW_PORT=$1
-          OLD_PORT=$2
+            echo "Stopping and removing old container if exists..."
+            docker rm -f $INACTIVE_CONTAINER || true
 
-          # Backup current config
-          cp /etc/nginx/conf.d/upstream.conf /etc/nginx/conf.d/upstream.conf.backup
+            echo "Starting new container: $INACTIVE_CONTAINER on port $NEW_PORT"
+            docker run -d \
+              --name $INACTIVE_CONTAINER \
+              -p $NEW_PORT:8080 \
+              -e MONGO_URL="${{ secrets.MONGO_URL }}" \
+              -e PORT=$NEW_PORT \
+              -e EMAIL="${{ secrets.EMAIL }}" \
+              -e PASSWORD="${{ secrets.PASSWORD }}" \
+              -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+              -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+              -e AWS_REGION="${{ secrets.AWS_REGION }}" \
+              -e AWS_BUCKET_NAME="${{ secrets.AWS_BUCKET_NAME }}" \
+              -e DOCKER_USER="${{ secrets.DOCKER_USER }}" \
+              -e DOCKER_PASS="${{ secrets.DOCKER_PASS }}" \
+              -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              --restart unless-stopped \
+              ${{ secrets.DOCKER_USER }}/rvs_backend:latest
 
-          # Update the upstream configuration to prioritize the new port
-          if [ "$NEW_PORT" = "8080" ]; then
-            cat > /etc/nginx/conf.d/upstream.conf << 'UPSTREAM_EOF'
-          upstream frontend_backend {
-              server localhost:5173 max_fails=2 fail_timeout=10s;
-              server localhost:5174 backup;
-          }
+            echo "Verifying deployment..."
+            MAX_RETRIES=5
+            ATTEMPT=1
+            SUCCESS=0
+            while [ $ATTEMPT -le $MAX_RETRIES ]; do
+              echo "Attempt $ATTEMPT: Testing traffic routing..."
+              sleep 5
+              if curl -s http://localhost:$NEW_PORT/health | grep "ok"; then
+                SUCCESS=1
+                break
+              fi
+              ATTEMPT=$((ATTEMPT + 1))
+            done
 
-          upstream api_backend {
-              server localhost:8080 max_fails=2 fail_timeout=10s;
-              server localhost:8081 backup;
-          }
-          UPSTREAM_EOF
-          else
-            cat > /etc/nginx/conf.d/upstream.conf << 'UPSTREAM_EOF'
-          upstream frontend_backend {
-              server localhost:5173 max_fails=2 fail_timeout=10s;
-              server localhost:5174 backup;
-          }
+            if [ $SUCCESS -eq 1 ]; then
+              echo "✅ New container is healthy. Switching traffic..."
+              sed -i "s/server localhost:8080/server localhost:$NEW_PORT/" /etc/nginx/conf.d/upstream.conf
+              nginx -t && nginx -s reload
+              docker rm -f $ACTIVE_CONTAINER || true
+            else
+              echo "❌ New deployment not receiving traffic, rolling back..."
+              docker rm -f $INACTIVE_CONTAINER
+              exit 1
+            fi
 
-          upstream api_backend {
-              server localhost:8081 max_fails=2 fail_timeout=10s;
-              server localhost:8080 backup;
-          }
-          UPSTREAM_EOF
-          fi
 
-          # Test nginx configuration
-          if nginx -t; then
-            echo "Nginx config test passed, reloading..."
-            systemctl reload nginx
-            echo "Nginx reloaded successfully"
-          else
-            echo "Nginx config test failed, rolling back..."
-            cp /etc/nginx/conf.d/upstream.conf.backup /etc/nginx/conf.d/upstream.conf
-            exit 1
-          fi
-          EOF
+
+
+# name: Deploy Node Application
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout Source
+#         uses: actions/checkout@v4
+#       - name: Login to Docker Hub
+#         uses: docker/login-action@v3
+#         with:
+#           username: ${{ secrets.DOCKER_USER }}
+#           password: ${{ secrets.DOCKER_PASS }}
+#       - name: Build Docker Image
+#         run: docker build -t raja9661/rvs_backend:latest .
+#       - name: Publish Image to Docker Hub
+#         run: docker push raja9661/rvs_backend:latest
+
+#   deploy:
+#     needs: build
+#     runs-on: self-hosted
+#     steps:
+#       - name: Check Initial Disk Usage
+#         run: df -h
+
+#       - name: Free Disk Space Aggressively
+#         run: |
+#           echo "----- Cleaning disk -----"
+#           echo "Before cleanup:"
+#           df -h
+#           # Only clean unused resources, keep running containers
+#           docker image prune -af
+#           docker container prune -f
+#           docker volume prune -af
+#           docker builder prune -af
+#           sudo rm -rf /root/.npm ~/.npm ~/.cache /tmp/* || true
+#           sudo journalctl --vacuum-time=1d || true
+#           echo "After cleanup:"
+#           df -h
+
+#       - name: Pull image from Docker Hub
+#         run: docker pull raja9661/rvs_backend:latest
+
+#       - name: Determine current active container and ports
+#         id: deployment
+#         run: |
+#           # Check which container is currently running on port 8080
+#           if docker ps --format "table {{.Names}}\t{{.Ports}}" | grep -q "nodejs-container.*8080"; then
+#             echo "Current active: nodejs-container on 8080"
+#             echo "active_container=nodejs-container" >> $GITHUB_OUTPUT
+#             echo "inactive_container=nodejs-container-blue" >> $GITHUB_OUTPUT
+#             echo "new_port=8081" >> $GITHUB_OUTPUT
+#             echo "active_port=8080" >> $GITHUB_OUTPUT
+#           elif docker ps --format "table {{.Names}}\t{{.Ports}}" | grep -q "nodejs-container-blue.*8081"; then
+#             echo "Current active: nodejs-container-blue on 8081"
+#             echo "active_container=nodejs-container-blue" >> $GITHUB_OUTPUT
+#             echo "inactive_container=nodejs-container" >> $GITHUB_OUTPUT
+#             echo "new_port=8080" >> $GITHUB_OUTPUT
+#             echo "active_port=8081" >> $GITHUB_OUTPUT
+#           else
+#             echo "No active container found, starting fresh"
+#             echo "active_container=" >> $GITHUB_OUTPUT
+#             echo "inactive_container=nodejs-container" >> $GITHUB_OUTPUT
+#             echo "new_port=8080" >> $GITHUB_OUTPUT
+#             echo "active_port=" >> $GITHUB_OUTPUT
+#           fi
+
+#       - name: Stop and remove inactive container
+#         run: |
+#           if [ -n "${{ steps.deployment.outputs.inactive_container }}" ]; then
+#             docker stop ${{ steps.deployment.outputs.inactive_container }} || true
+#             docker rm ${{ steps.deployment.outputs.inactive_container }} || true
+#           fi
+
+#       - name: Start new container
+#         run: |
+#           echo "Starting new container: ${{ steps.deployment.outputs.inactive_container }} on port ${{ steps.deployment.outputs.new_port }}"
+#           docker run -d \
+#             --name ${{ steps.deployment.outputs.inactive_container }} \
+#             -p ${{ steps.deployment.outputs.new_port }}:8080 \
+#             -e MONGO_URL="${{ secrets.MONGO_URL }}" \
+#             -e PORT="${{ secrets.PORT }}" \
+#             -e EMAIL="${{ secrets.EMAIL }}" \
+#             -e PASSWORD="${{ secrets.PASSWORD }}" \
+#             -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+#             -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+#             -e AWS_REGION="${{ secrets.AWS_REGION }}" \
+#             -e AWS_BUCKET_NAME="${{ secrets.AWS_BUCKET_NAME }}" \
+#             -e DOCKER_USER="${{ secrets.DOCKER_USER }}" \
+#             -e DOCKER_PASS="${{ secrets.DOCKER_PASS }}" \
+#             -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+#             --restart unless-stopped \
+#             raja9661/rvs_backend:latest
+
+#       - name: Wait for new container to be healthy
+#         run: |
+#           echo "Waiting for new container to be ready..."
+#           sleep 15
+#           for i in {1..24}; do
+#             if curl -f http://localhost:${{ steps.deployment.outputs.new_port }}/api/health 2>/dev/null || curl -f http://localhost:${{ steps.deployment.outputs.new_port }}/ 2>/dev/null; then
+#               echo "✅ New container is healthy!"
+#               break
+#             elif [ $i -eq 24 ]; then
+#               echo "❌ Health check failed after 24 attempts (2 minutes)"
+#               echo "Container logs:"
+#               docker logs ${{ steps.deployment.outputs.inactive_container }}
+#               docker stop ${{ steps.deployment.outputs.inactive_container }}
+#               docker rm ${{ steps.deployment.outputs.inactive_container }}
+#               exit 1
+#             else
+#               echo "Attempt $i: Container not ready yet, waiting 5s..."
+#               sleep 5
+#             fi
+#           done
+
+#       - name: Update nginx upstream configuration
+#         run: |
+#           echo "Updating nginx upstream configuration..."
+#           # Create a script to swap the upstream servers
+#           cat > /tmp/update_upstream.sh << 'EOF'
+#           #!/bin/bash
+
+#           NEW_PORT=$1
+#           OLD_PORT=$2
+
+#           # Backup current config
+#           cp /etc/nginx/conf.d/upstream.conf /etc/nginx/conf.d/upstream.conf.backup
+
+#           # Update the upstream configuration to prioritize the new port
+#           if [ "$NEW_PORT" = "8080" ]; then
+#             cat > /etc/nginx/conf.d/upstream.conf << 'UPSTREAM_EOF'
+#           upstream frontend_backend {
+#               server localhost:5173 max_fails=2 fail_timeout=10s;
+#               server localhost:5174 backup;
+#           }
+
+#           upstream api_backend {
+#               server localhost:8080 max_fails=2 fail_timeout=10s;
+#               server localhost:8081 backup;
+#           }
+#           UPSTREAM_EOF
+#           else
+#             cat > /etc/nginx/conf.d/upstream.conf << 'UPSTREAM_EOF'
+#           upstream frontend_backend {
+#               server localhost:5173 max_fails=2 fail_timeout=10s;
+#               server localhost:5174 backup;
+#           }
+
+#           upstream api_backend {
+#               server localhost:8081 max_fails=2 fail_timeout=10s;
+#               server localhost:8080 backup;
+#           }
+#           UPSTREAM_EOF
+#           fi
+
+#           # Test nginx configuration
+#           if nginx -t; then
+#             echo "Nginx config test passed, reloading..."
+#             systemctl reload nginx
+#             echo "Nginx reloaded successfully"
+#           else
+#             echo "Nginx config test failed, rolling back..."
+#             cp /etc/nginx/conf.d/upstream.conf.backup /etc/nginx/conf.d/upstream.conf
+#             exit 1
+#           fi
+#           EOF
 
           chmod +x /tmp/update_upstream.sh
           sudo /tmp/update_upstream.sh ${{ steps.deployment.outputs.new_port }} ${{ steps.deployment.outputs.active_port }}
