@@ -438,97 +438,97 @@ jobs:
 
 #       - name: Final Disk Check
 #         run: df -h
-# name: Deploy Node Application
+name: Deploy Node Application
 
-# on:
-#   push:
-#     branches:
-#       - main
+on:
+  push:
+    branches:
+      - main
 
-# jobs:
-#   build:
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: Checkout Source
-#         uses: actions/checkout@v4
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-#       - name: Login to Docker Hub
-#         uses: docker/login-action@v3
-#         with:
-#           username: ${{ secrets.DOCKER_USER }}
-#           password: ${{ secrets.DOCKER_PASS }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASS }}
 
-#       - name: Build Docker Image
-#         run: docker build -t raja9661/rvs_backend:latest .
+      - name: Build Docker Image
+        run: docker build -t raja9661/rvs_backend:latest .
 
-#       - name: Publish Image to Docker Hub
-#         run: docker push raja9661/rvs_backend:latest
+      - name: Publish Image to Docker Hub
+        run: docker push raja9661/rvs_backend:latest
 
-#   deploy:
-#     needs: build
-#     runs-on: self-hosted
-#     steps:
-#       - name: Check Initial Disk Usage
-#         run: df -h
+  deploy:
+    needs: build
+    runs-on: self-hosted
+    steps:
+      - name: Check Initial Disk Usage
+        run: df -h
 
-#       - name: Free Disk Space Aggressively
-#         run: |
-#           echo "----- Cleaning disk -----"
-#           echo "Before cleanup:"
-#           df -h
+      - name: Free Disk Space Aggressively
+        run: |
+          echo "----- Cleaning disk -----"
+          echo "Before cleanup:"
+          df -h
 
-#           # Stop and remove all running and stopped containers
-#           docker stop $(docker ps -aq) || true
-#           docker rm $(docker ps -aq) || true
+          # Stop and remove all running and stopped containers
+          docker stop $(docker ps -aq) || true
+          docker rm $(docker ps -aq) || true
 
-#           # Remove all Docker images, containers, volumes, and build cache
-#           docker system prune -af --volumes
-#           docker builder prune -af
-#           docker image prune -af
+          # Remove all Docker images, containers, volumes, and build cache
+          docker system prune -af --volumes
+          docker builder prune -af
+          docker image prune -af
 
-#           # Remove npm and temp caches
-#           sudo rm -rf /root/.npm
-#           sudo rm -rf ~/.npm
-#           sudo rm -rf ~/.cache
-#           sudo rm -rf /tmp/* || true
+          # Remove npm and temp caches
+          sudo rm -rf /root/.npm
+          sudo rm -rf ~/.npm
+          sudo rm -rf ~/.cache
+          sudo rm -rf /tmp/* || true
 
-#           # Vacuum old logs
-#           sudo journalctl --vacuum-time=1d || true
-#           sudo rm -rf /var/log/* || true
+          # Vacuum old logs
+          sudo journalctl --vacuum-time=1d || true
+          sudo rm -rf /var/log/* || true
 
-#           # Show disk space after cleanup
-#           echo "After cleanup:"
-#           df -h
+          # Show disk space after cleanup
+          echo "After cleanup:"
+          df -h
 
-#       - name: Show Top Folders by Size (Debug)
-#         run: sudo du -sh /* | sort -h | tail -n 20
+      - name: Show Top Folders by Size (Debug)
+        run: sudo du -sh /* | sort -h | tail -n 20
 
-#       - name: Pull image from Docker Hub
-#         run: docker pull raja9661/rvs_backend:latest
+      - name: Pull image from Docker Hub
+        run: docker pull raja9661/rvs_backend:latest
 
-#       - name: Stop existing container (if running)
-#         run: |
-#           docker stop nodejs-container || true
-#           docker rm nodejs-container || true
-#         continue-on-error: true
+      - name: Stop existing container (if running)
+        run: |
+          docker stop nodejs-container || true
+          docker rm nodejs-container || true
+        continue-on-error: true
 
-#       - name: Run Docker Container
-#         run: |
-#           docker run -d \
-#             --name nodejs-container \
-#             -p 8080:8080 \
-#             -e MONGO_URL="${{ secrets.MONGO_URL }}" \
-#             -e PORT="${{ secrets.PORT }}" \
-#             -e EMAIL="${{ secrets.EMAIL }}" \
-#             -e PASSWORD="${{ secrets.PASSWORD }}" \
-#             -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
-#             -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
-#             -e AWS_REGION="${{ secrets.AWS_REGION }}" \
-#             -e AWS_BUCKET_NAME="${{ secrets.AWS_BUCKET_NAME }}" \
-#             -e DOCKER_USER="${{ secrets.DOCKER_USER }}" \
-#             -e DOCKER_PASS="${{ secrets.DOCKER_PASS }}" \
-#             -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
-#             raja9661/rvs_backend:latest
+      - name: Run Docker Container
+        run: |
+          docker run -d \
+            --name nodejs-container \
+            -p 8080:8080 \
+            -e MONGO_URL="${{ secrets.MONGO_URL }}" \
+            -e PORT="${{ secrets.PORT }}" \
+            -e EMAIL="${{ secrets.EMAIL }}" \
+            -e PASSWORD="${{ secrets.PASSWORD }}" \
+            -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+            -e AWS_REGION="${{ secrets.AWS_REGION }}" \
+            -e AWS_BUCKET_NAME="${{ secrets.AWS_BUCKET_NAME }}" \
+            -e DOCKER_USER="${{ secrets.DOCKER_USER }}" \
+            -e DOCKER_PASS="${{ secrets.DOCKER_PASS }}" \
+            -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+            raja9661/rvs_backend:latest
 
-#       - name: Final Disk Check
-#         run: df -h
+      - name: Final Disk Check
+        run: df -h
