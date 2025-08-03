@@ -113,7 +113,7 @@ app.use("/column-config", columnConfigRoutes);
 
 
 
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.status(200).json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
