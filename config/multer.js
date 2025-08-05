@@ -14,7 +14,7 @@ function chooseFolder(req) {
 
 const upload = multer({
   storage: multerS3({
-    s3: s3,             
+    s3: s3,
     bucket: process.env.AWS_BUCKET_NAME,
     contentType: multerS3.AUTO_CONTENT_TYPE,
     key: function (req, file, cb) {
@@ -23,7 +23,7 @@ const upload = multer({
       cb(null, `${folder}${filename}`);
     },
   }),
-  limits: { fileSize: 100 * 1024 * 1024 }
+  limits: { fileSize: 200 * 1024 * 1024 }
 });
 
 module.exports = upload;

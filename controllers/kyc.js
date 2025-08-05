@@ -18,7 +18,8 @@ const { getIo } = require("../config/socket");
 const { GetObjectCommand ,HeadObjectCommand } = require("@aws-sdk/client-s3");
 const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const s3 = require('../config/s3Config');
-const streamToBuffer = require("../utils/streamToBuffer"); 
+const streamToBuffer = require("../utils/streamToBuffer");
+const Counter = require("../models/uniqueCaseId"); 
 // const ColumnConfig = require("../models/ColumnPreferences");
 const { 
   fetchDashboardStats,
@@ -215,7 +216,26 @@ const getIPAddress = (req) => {
 };
 
 
+const generateUniqueCaseId = async () => {
+  const result = await Counter.findOneAndUpdate(
+    { name: "caseId" },               
+    { $inc: { seq: 1 } },             
+    { new: true, upsert: true }   
+  );
+
+  return result.seq.toString();
+};
+
+
+
+
 // Single KYC Upload
+
+function normalizeProductName(name) {
+  return name.trim().toUpperCase();
+}
+
+
 
 exports.singleUpload = async (req, res) => {
   try {
@@ -282,17 +302,33 @@ exports.singleUpload = async (req, res) => {
         });
     }
 
-    // Standardize product name
-    const bestMatch = await findBestMatch(product);
-    const standardized = bestMatch || {
-      updatedName: product,
-      upn: "",
-      productType: "",
+    const normalizedProduct = normalizeProductName(product);
+    const manualMapping = await Product.findOne({ productName: normalizedProduct });
+    let  standardized = ""
+    if(manualMapping){
+      // console.log("manualMapping:",manualMapping)
+      standardized = {
+      updatedName: manualMapping.updatedProduct,
+      upn: manualMapping.correctUPN,
+      productType: manualMapping.productType,
     };
+    }else{
+
+    const bestMatch = await findBestMatch(product);
+    standardized = bestMatch || {
+    updatedName: product,
+    upn: "",
+    productType: "",
+    };
+
+    }
+
+    // Standardize product name
+    
     let isduplicate = false
     if(standardized.productType === "ITO"){
 
-    const existingKYCRecords = await KYC.find({ accountNumber, product });
+    const existingKYCRecords = await KYC.find({ accountNumber, product:normalizedProduct });
     if (existingKYCRecords.length > 0) {
       isduplicate = true
     for (const record of existingKYCRecords) {
@@ -517,18 +553,31 @@ exports.bulkUpload = async (req, res) => {
       }
 
       // Standardize product
-      const bestMatch = await findBestMatch(product);
-      const standardized = bestMatch || {
-        updatedName: product,
-        upn: "",
-        productType: "",
-      };
+    const normalizedProduct = normalizeProductName(product);
+    const manualMapping = await Product.findOne({ productName: normalizedProduct });
+    let  standardized = ""
+    if(manualMapping){
+      standardized = {
+      updatedName: manualMapping.updatedProduct,
+      upn: manualMapping.correctUPN,
+      productType: manualMapping.productType,
+    };
+    }else{
+
+    const bestMatch = await findBestMatch(product);
+    standardized = bestMatch || {
+    updatedName: product,
+    upn: "",
+    productType: "",
+    };
+
+    }
 
       let isduplicate = false;
       if (standardized.productType === "ITO") {
         const existingITO = await KYC.find({
           accountNumber,
-          product,
+          product:normalizedProduct,
         });
         if (existingITO.length > 0) {
           isduplicate = true;
@@ -1104,17 +1153,31 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
       }
 
       // Standardize product name
-      const bestMatch = await findBestMatch(product);
-      const standardized = bestMatch || {
-        updatedName: product,
-        upn: "",
-        productType: "",
-      };
+    const normalizedProduct = normalizeProductName(product);
+    const manualMapping = await Product.findOne({ productName: normalizedProduct });
+    let  standardized = ""
+    if(manualMapping){
+      // console.log("manualMapping",manualMapping)
+      standardized = {
+      updatedName: manualMapping.updatedProduct,
+      upn: manualMapping.correctUPN,
+      productType: manualMapping.productType,
+    };
+    }else{
+
+    const bestMatch = await findBestMatch(product);
+    standardized = bestMatch || {
+    updatedName: product,
+    upn: "",
+    productType: "",
+    };
+
+    }
 
       let isduplicate = false
     if(standardized.productType === "ITO"){
 
-    const existingKYCRecords = await KYC.find({ accountNumber, product });
+    const existingKYCRecords = await KYC.find({ accountNumber, product:normalizedProduct });
     if (existingKYCRecords.length > 0) {
       isduplicate = true
     for (const record of existingKYCRecords) {

@@ -84,13 +84,219 @@ exports.getDashboardData = async (req, res) => {
 };
 
 // Case details with client role support
+// exports.getCaseDetails = async (req, res) => {
+//   try {
+//     const { type, year, month, clientType, productType, clientCode, product, download } = req.query;
+//     // const { role, user, code } = req.body;
+//     const { role, user, code } = req.body.requestBody;
+//     const userClientCode = code;
+    
+    
+//     // Base query with role enforcement
+//     let query = {};
+//     if (role === 'employee') {
+//       query = { listByEmployee: user };
+//     } 
+//     if (role === 'client') {
+      
+//       if (!userClientCode) {
+//         return res.status(403).json({
+//           success: false,
+//           message: "Client code is required"
+//         });
+//       }
+//       query = { clientCode: userClientCode };
+      
+//     }
+
+//     // Handle today cases
+//     if (type === 'today') {
+//       const startOfDay = new Date();
+//       startOfDay.setHours(0, 0, 0, 0);
+//       query.createdAt = { $gte: startOfDay };
+//     } 
+//     // Case type filters
+//     else if (type === 'New Pending') query.caseStatus = 'New Pending';
+//     else if (type === 'closed') query.status = 'Closed';
+//     else if (type === 'highPriority') query.priority = 'Urgent';
+    
+//     // Date filters (excluding today cases)
+//     if (type !== 'today') {
+//       if (year) query.year = year;
+//       if (month) query.month = month;
+//     }
+    
+//     // Hierarchy filters
+//     if (clientType) query.clientType = clientType;
+//     if (productType) query.productType = productType;
+//     if (clientCode) {
+//       // For clients, verify they can only access their own clientCode
+//       if (role === 'client' && clientCode !== userClientCode) {
+//         return res.status(403).json({
+//           success: false,
+//           message: "Access to other client data denied"
+//         });
+//       }
+//       query.clientCode = clientCode;
+//     }
+//     if (product) query.product = product;
+
+//     // Get full records
+//     let fullRecords = await KYC.find(query).lean();
+
+//     // Handle Excel download
+//     // if (download) {
+//     //   const worksheet = XLSX.utils.json_to_sheet(fullRecords);
+//     //   const workbook = XLSX.utils.book_new();
+//     //   XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
+//     //   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      
+//     //   res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
+//     //   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+//     //   return res.send(buffer);
+//     // }
+//     if (download) {
+//       // Define allowed columns for each role
+//       const allowedColumns = {
+//         admin: null, // null means all columns
+//         employee: null,
+//         client: [
+//           'caseId',
+//           'attachments',
+//           'remarks',
+//           'name',
+//           'details',
+//           'details1',
+//           'priority',
+//           'correctUPN',
+//           'product',
+//           'updateProductName',
+//           'accountNumber',
+//           'requirement',
+//           'updatedRequirement',
+//           'clientCode',
+//           'dateIn',
+//           'status',
+//           'dateInDate',
+//           'caseStatus',
+//           'productType',
+//           'listByEmployee',
+//           'dateOut',
+//           'sentBy',
+//           'caseDoneBy',
+//           'customerCare',
+//           'NameUploadBy',
+//           'sentDate',
+//           'isRechecked'
+//         ]
+//       };
+
+//       // Filter columns if role is client
+//       if (role === 'client' && allowedColumns.client) {
+//         fullRecords = fullRecords.map(record => {
+//           const filteredRecord = {};
+//           allowedColumns.client.forEach(col => {
+//             if (record[col] !== undefined) {
+//               filteredRecord[col] = record[col];
+//             }
+//           });
+//           return filteredRecord;
+//         });
+//       }
+
+//       const worksheet = XLSX.utils.json_to_sheet(fullRecords);
+//       const workbook = XLSX.utils.book_new();
+//       XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
+//       const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      
+//       res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
+//       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+//       return res.send(buffer);
+//     }
+//     // Determine hierarchy level
+//     const hierarchyLevel = product ? 'productDetails' : 
+//       clientCode ? 'product' : 
+//       productType ? 'clientCode' : 
+//       clientType ? 'productType' : 
+//       type === 'today' || month ? 'clientType' : 
+//       year ? 'month' : 'year';
+
+//     // Return aggregated data for navigation
+//     let data = [];
+    
+//     if (hierarchyLevel === 'productDetails') {
+//       data = fullRecords;
+//     }
+//     else if (hierarchyLevel === 'product') {
+//       const productMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = productMap.get(item.product) || 0;
+//         productMap.set(item.product, count + 1);
+//       });
+//       data = Array.from(productMap, ([name, count]) => ({ name, count }));
+//     }
+//     else if (hierarchyLevel === 'clientCode') {
+//       const clientMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = clientMap.get(item.clientCode) || 0;
+//         clientMap.set(item.clientCode, count + 1);
+//       });
+//       data = Array.from(clientMap, ([name, count]) => ({ name, count }));
+//     }
+//     else if (hierarchyLevel === 'productType') {
+//       const productTypeMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = productTypeMap.get(item.productType) || 0;
+//         productTypeMap.set(item.productType, count + 1);
+//       });
+//       data = Array.from(productTypeMap, ([name, count]) => ({ name, count }));
+//     }
+//     else if (hierarchyLevel === 'clientType') {
+//       const typeMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = typeMap.get(item.clientType) || 0;
+//         typeMap.set(item.clientType, count + 1);
+//       });
+//       data = Array.from(typeMap, ([name, count]) => ({ name, count }));
+//     }
+//     else if (hierarchyLevel === 'month') {
+//       const monthMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = monthMap.get(item.month) || 0;
+//         monthMap.set(item.month, count + 1);
+//       });
+//       data = Array.from(monthMap, ([name, count]) => ({ name, count }));
+//     }
+//     else if (hierarchyLevel === 'year') {
+//       const yearMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = yearMap.get(item.year) || 0;
+//         yearMap.set(item.year, count + 1);
+//       });
+//       data = Array.from(yearMap, ([name, count]) => ({ name, count }));
+//     }
+
+//     res.json({ 
+//       success: true,
+//       data,
+//       records: fullRecords,
+//       hierarchyLevel
+//     });
+
+//   } catch (error) {
+//     console.error('Error in getCaseDetails:', error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: 'Failed to fetch case details',
+//       error: error.message
+//     });
+//   }
+// };
 exports.getCaseDetails = async (req, res) => {
   try {
-    const { type, year, month, clientType, productType, clientCode, product, download } = req.query;
-    // const { role, user, code } = req.body;
+    const { type, year, month, clientType, clientCode, updatedProductName, download } = req.query;
     const { role, user, code } = req.body.requestBody;
     const userClientCode = code;
-    
     
     // Base query with role enforcement
     let query = {};
@@ -98,7 +304,6 @@ exports.getCaseDetails = async (req, res) => {
       query = { listByEmployee: user };
     } 
     if (role === 'client') {
-      
       if (!userClientCode) {
         return res.status(403).json({
           success: false,
@@ -106,7 +311,6 @@ exports.getCaseDetails = async (req, res) => {
         });
       }
       query = { clientCode: userClientCode };
-      
     }
 
     // Handle today cases
@@ -128,9 +332,7 @@ exports.getCaseDetails = async (req, res) => {
     
     // Hierarchy filters
     if (clientType) query.clientType = clientType;
-    if (productType) query.productType = productType;
     if (clientCode) {
-      // For clients, verify they can only access their own clientCode
       if (role === 'client' && clientCode !== userClientCode) {
         return res.status(403).json({
           success: false,
@@ -139,85 +341,15 @@ exports.getCaseDetails = async (req, res) => {
       }
       query.clientCode = clientCode;
     }
-    if (product) query.product = product;
+    if (updatedProductName) query.updatedProductName = updatedProductName;
 
     // Get full records
     let fullRecords = await KYC.find(query).lean();
 
-    // Handle Excel download
-    // if (download) {
-    //   const worksheet = XLSX.utils.json_to_sheet(fullRecords);
-    //   const workbook = XLSX.utils.book_new();
-    //   XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
-    //   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      
-    //   res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
-    //   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    //   return res.send(buffer);
-    // }
-    if (download) {
-      // Define allowed columns for each role
-      const allowedColumns = {
-        admin: null, // null means all columns
-        employee: null,
-        client: [
-          'caseId',
-          'attachments',
-          'remarks',
-          'name',
-          'details',
-          'details1',
-          'priority',
-          'correctUPN',
-          'product',
-          'updateProductName',
-          'accountNumber',
-          'requirement',
-          'updatedRequirement',
-          'clientCode',
-          'dateIn',
-          'status',
-          'dateInDate',
-          'caseStatus',
-          'productType',
-          'listByEmployee',
-          'dateOut',
-          'sentBy',
-          'caseDoneBy',
-          'customerCare',
-          'NameUploadBy',
-          'sentDate',
-          'isRechecked'
-        ]
-      };
-
-      // Filter columns if role is client
-      if (role === 'client' && allowedColumns.client) {
-        fullRecords = fullRecords.map(record => {
-          const filteredRecord = {};
-          allowedColumns.client.forEach(col => {
-            if (record[col] !== undefined) {
-              filteredRecord[col] = record[col];
-            }
-          });
-          return filteredRecord;
-        });
-      }
-
-      const worksheet = XLSX.utils.json_to_sheet(fullRecords);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      
-      res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      return res.send(buffer);
-    }
     // Determine hierarchy level
-    const hierarchyLevel = product ? 'productDetails' : 
-      clientCode ? 'product' : 
-      productType ? 'clientCode' : 
-      clientType ? 'productType' : 
+    const hierarchyLevel = updatedProductName ? 'productDetails' : 
+      clientCode ? 'updatedProductName' : 
+      clientType ? 'clientCode' : 
       type === 'today' || month ? 'clientType' : 
       year ? 'month' : 'year';
 
@@ -227,11 +359,12 @@ exports.getCaseDetails = async (req, res) => {
     if (hierarchyLevel === 'productDetails') {
       data = fullRecords;
     }
-    else if (hierarchyLevel === 'product') {
+    else if (hierarchyLevel === 'updatedProductName') {
       const productMap = new Map();
       fullRecords.forEach(item => {
-        const count = productMap.get(item.product) || 0;
-        productMap.set(item.product, count + 1);
+        const productName = item.updatedProductName;
+        const count = productMap.get(productName) || 0;
+        productMap.set(productName, count + 1);
       });
       data = Array.from(productMap, ([name, count]) => ({ name, count }));
     }
@@ -242,14 +375,6 @@ exports.getCaseDetails = async (req, res) => {
         clientMap.set(item.clientCode, count + 1);
       });
       data = Array.from(clientMap, ([name, count]) => ({ name, count }));
-    }
-    else if (hierarchyLevel === 'productType') {
-      const productTypeMap = new Map();
-      fullRecords.forEach(item => {
-        const count = productTypeMap.get(item.productType) || 0;
-        productTypeMap.set(item.productType, count + 1);
-      });
-      data = Array.from(productTypeMap, ([name, count]) => ({ name, count }));
     }
     else if (hierarchyLevel === 'clientType') {
       const typeMap = new Map();
@@ -276,6 +401,64 @@ exports.getCaseDetails = async (req, res) => {
       data = Array.from(yearMap, ([name, count]) => ({ name, count }));
     }
 
+    // Handle Excel download
+    if (download) {
+      const allowedColumns = {
+        admin: null,
+        employee: null,
+        client: [
+          'caseId',
+          'attachments',
+          'remarks',
+          'name',
+          'details',
+          'details1',
+          'priority',
+          'correctUPN',
+          'product',
+          'updatedProductName',
+          'accountNumber',
+          'requirement',
+          'updatedRequirement',
+          'clientCode',
+          'dateIn',
+          'status',
+          'dateInDate',
+          'caseStatus',
+          'productType',
+          'listByEmployee',
+          'dateOut',
+          'sentBy',
+          'caseDoneBy',
+          'customerCare',
+          'NameUploadBy',
+          'sentDate',
+          'isRechecked'
+        ]
+      };
+
+      if (role === 'client' && allowedColumns.client) {
+        fullRecords = fullRecords.map(record => {
+          const filteredRecord = {};
+          allowedColumns.client.forEach(col => {
+            if (record[col] !== undefined) {
+              filteredRecord[col] = record[col];
+            }
+          });
+          return filteredRecord;
+        });
+      }
+
+      const worksheet = XLSX.utils.json_to_sheet(fullRecords);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      
+      res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      return res.send(buffer);
+    }
+
     res.json({ 
       success: true,
       data,
@@ -292,6 +475,200 @@ exports.getCaseDetails = async (req, res) => {
     });
   }
 };
+
+// exports.getCaseDetails = async (req, res) => {
+//   try {
+//     const { type, year, month, clientType, productType, clientCode, updatedProductName, download } = req.query;
+//     const { role, user, code } = req.body.requestBody;
+//     const userClientCode = code;
+    
+//     // Base query with role enforcement
+//     let query = {};
+//     if (role === 'employee') {
+//       query = { listByEmployee: user };
+//     } 
+//     if (role === 'client') {
+//       if (!userClientCode) {
+//         return res.status(403).json({
+//           success: false,
+//           message: "Client code is required"
+//         });
+//       }
+//       query = { clientCode: userClientCode };
+//     }
+
+//     // Handle today cases
+//     if (type === 'today') {
+//       const startOfDay = new Date();
+//       startOfDay.setHours(0, 0, 0, 0);
+//       query.createdAt = { $gte: startOfDay };
+//     } 
+//     // Case type filters
+//     else if (type === 'New Pending') query.caseStatus = 'New Pending';
+//     else if (type === 'closed') query.status = 'Closed';
+//     else if (type === 'highPriority') query.priority = 'Urgent';
+    
+//     // Date filters (excluding today cases)
+//     if (type !== 'today') {
+//       if (year) query.year = year;
+//       if (month) query.month = month;
+//     }
+    
+//     // Hierarchy filters
+//     if (clientType) query.clientType = clientType;
+//     if (productType) query.productType = productType;
+//     if (clientCode) {
+//       if (role === 'client' && clientCode !== userClientCode) {
+//         return res.status(403).json({
+//           success: false,
+//           message: "Access to other client data denied"
+//         });
+//       }
+//       query.clientCode = clientCode;
+//     }
+//     if (updatedProductName) query.updatedProductName = updatedProductName;
+
+//     // Get full records
+//     let fullRecords = await KYC.find(query).lean();
+
+//     // Determine hierarchy level
+//     const hierarchyLevel = updatedProductName ? 'productDetails' : 
+//       clientCode ? 'updatedProductName' : 
+//       productType ? 'clientCode' : 
+//       clientType ? 'productType' : 
+//       type === 'today' || month ? 'clientType' : 
+//       year ? 'month' : 'year';
+
+//     // Return aggregated data for navigation
+//     let data = [];
+    
+//     if (hierarchyLevel === 'productDetails') {
+//       data = fullRecords;
+//     }
+//     else if (hierarchyLevel === 'updatedProductName') {
+//       const productMap = new Map();
+//       fullRecords.forEach(item => {
+//         const productName = item.updatedProductName || item.product;
+//         const count = productMap.get(productName) || 0;
+//         productMap.set(productName, count + 1);
+//       });
+//       data = Array.from(productMap, ([name, count]) => ({ name, count }));
+//     }
+//     else if (hierarchyLevel === 'clientCode') {
+//       const clientMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = clientMap.get(item.clientCode) || 0;
+//         clientMap.set(item.clientCode, count + 1);
+//       });
+//       data = Array.from(clientMap, ([name, count]) => ({ name, count }));
+//     }
+//     else if (hierarchyLevel === 'productType') {
+//       const productTypeMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = productTypeMap.get(item.productType) || 0;
+//         productTypeMap.set(item.productType, count + 1);
+//       });
+//       data = Array.from(productTypeMap, ([name, count]) => ({ name, count }));
+//     }
+//     else if (hierarchyLevel === 'clientType') {
+//       const typeMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = typeMap.get(item.clientType) || 0;
+//         typeMap.set(item.clientType, count + 1);
+//       });
+//       data = Array.from(typeMap, ([name, count]) => ({ name, count }));
+//     }
+//     else if (hierarchyLevel === 'month') {
+//       const monthMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = monthMap.get(item.month) || 0;
+//         monthMap.set(item.month, count + 1);
+//       });
+//       data = Array.from(monthMap, ([name, count]) => ({ name, count }));
+//     }
+//     else if (hierarchyLevel === 'year') {
+//       const yearMap = new Map();
+//       fullRecords.forEach(item => {
+//         const count = yearMap.get(item.year) || 0;
+//         yearMap.set(item.year, count + 1);
+//       });
+//       data = Array.from(yearMap, ([name, count]) => ({ name, count }));
+//     }
+
+//     // Handle Excel download
+//     if (download) {
+//       const allowedColumns = {
+//         admin: null,
+//         employee: null,
+//         client: [
+//           'caseId',
+//           'attachments',
+//           'remarks',
+//           'name',
+//           'details',
+//           'details1',
+//           'priority',
+//           'correctUPN',
+//           'product',
+//           'updatedProductName',
+//           'accountNumber',
+//           'requirement',
+//           'updatedRequirement',
+//           'clientCode',
+//           'dateIn',
+//           'status',
+//           'dateInDate',
+//           'caseStatus',
+//           'productType',
+//           'listByEmployee',
+//           'dateOut',
+//           'sentBy',
+//           'caseDoneBy',
+//           'customerCare',
+//           'NameUploadBy',
+//           'sentDate',
+//           'isRechecked'
+//         ]
+//       };
+
+//       if (role === 'client' && allowedColumns.client) {
+//         fullRecords = fullRecords.map(record => {
+//           const filteredRecord = {};
+//           allowedColumns.client.forEach(col => {
+//             if (record[col] !== undefined) {
+//               filteredRecord[col] = record[col];
+//             }
+//           });
+//           return filteredRecord;
+//         });
+//       }
+
+//       const worksheet = XLSX.utils.json_to_sheet(fullRecords);
+//       const workbook = XLSX.utils.book_new();
+//       XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
+//       const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      
+//       res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
+//       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+//       return res.send(buffer);
+//     }
+
+//     res.json({ 
+//       success: true,
+//       data,
+//       records: fullRecords,
+//       hierarchyLevel
+//     });
+
+//   } catch (error) {
+//     console.error('Error in getCaseDetails:', error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: 'Failed to fetch case details',
+//       error: error.message
+//     });
+//   }
+// };
 
 // Manual update trigger with client role support
 exports.sendManualUpdate = async (req, res) => {
