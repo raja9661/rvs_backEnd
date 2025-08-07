@@ -216,15 +216,31 @@ const getIPAddress = (req) => {
 };
 
 
-const generateUniqueCaseId = async () => {
-  const result = await Counter.findOneAndUpdate(
-    { name: "caseId" },               
-    { $inc: { seq: 1 } },             
-    { new: true, upsert: true }   
-  );
 
-  return result.seq.toString();
+const generateRandomAlphanumeric = (length = 6) => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 };
+
+const generateUniqueCaseId = async () => {
+  let unique = false;
+  let caseId = '';
+
+  while (!unique) {
+    caseId = generateRandomAlphanumeric(6);
+    const exists = await KYC.findOne({ caseId });
+    if (!exists) unique = true;
+  }
+
+  return caseId;
+};
+
+
+
 
 
 
@@ -359,7 +375,7 @@ exports.singleUpload = async (req, res) => {
               const ipResponse = await axios.get("https://api64.ipify.org?format=json");
               ipAddress = ipResponse.data.ip; // Get actual public IP
             }
-    
+    const uniqueCaseId = await generateUniqueCaseId()
     // Create new KYC record
     const newKYC = new KYC({
       name,
@@ -367,7 +383,7 @@ exports.singleUpload = async (req, res) => {
       accountNumber,
       requirement,
       userId,
-      caseId: generateCaseId(),
+      caseId: uniqueCaseId || generateCaseId(),
       dateIn: getFormattedDateTime(),
       dateInDate: getFormattedDateDay(),
       accountNumberDigit: countDigits(accountNumber),
@@ -613,6 +629,7 @@ exports.bulkUpload = async (req, res) => {
       }
 
       const date = new Date();
+      const uniqueCaseId = await generateUniqueCaseId()
 
       bulkInsert.push({
         name,
@@ -620,7 +637,7 @@ exports.bulkUpload = async (req, res) => {
         accountNumber,
         requirement,
         userId,
-        caseId: generateCaseId(),
+        caseId: uniqueCaseId || generateCaseId(),
         dateIn: getFormattedDateTime(),
         dateInDate: getFormattedDateDay(),
         accountNumberDigit: countDigits(accountNumber),
@@ -1194,6 +1211,7 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
    });
     
     const vandorname = vendor?.vendorName || "not found";
+    const uniqueCaseId = await generateUniqueCaseId()
 
       // Create new record
       await KYC.create({
@@ -1202,7 +1220,7 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
         accountNumber,
         requirement,
         userId,
-        caseId: generateCaseId(),
+        caseId: uniqueCaseId || generateCaseId(),
         dateIn: getFormattedDateTime(),
         dateInDate: getFormattedDateDay(),
         accountNumberDigit: countDigits(accountNumber),
@@ -4154,8 +4172,25 @@ exports.deleteAttachment = async (req, res) => {
 
 // New endpoint for batch deduce
 exports.similarRecords = async (req, res) => {
+  const { userId } = req.body
+  console.log("userId:",req.body.userId)
   try {
-    const records = await KYC.find({isDedup: true}).sort({ _id: -1 });
+
+    const user = await User.findOne({userId})
+    console.log("user:",user)
+    if (!user){
+      return res.status(401).json({
+      success: false,
+      message: "user not found"
+    });
+    }
+    let records = "";
+    if(user.role === "employee"){
+      records = await KYC.find({isDedup: true,listByEmployee:user.name}).sort({ _id: -1 });
+    }else{
+      records = await KYC.find({isDedup: true}).sort({ _id: -1 });
+    }
+    
     
     // Group by product and accountNumber
     const grouped = {};
