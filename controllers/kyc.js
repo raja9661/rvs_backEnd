@@ -2155,17 +2155,6 @@ exports.getTrackerData = async (req, res) => {
   ];
 }
 
-    // if (searchQuery) {
-    //   query.$or = [
-    //     { caseId: { $regex: searchQuery, $options: 'i' } },
-    //     { accountNumber: { $regex: searchQuery, $options: 'i' } },
-    //     { name: { $regex: searchQuery, $options: 'i' } },
-    //     { clientCode: { $regex: searchQuery, $options: 'i' } },
-    //     { bankCode: { $regex: searchQuery, $options: 'i' } },
-    //     { details: { $regex: searchQuery, $options: 'i' } },
-    //     { remarks: { $regex: searchQuery, $options: 'i' } }
-    //   ];
-    // }
     
     // Apply filters
     if (product) query.product = product;
@@ -2176,55 +2165,6 @@ exports.getTrackerData = async (req, res) => {
     if (priority) query.priority = priority;
     if (clientType) query.clientType = clientType;
 
-    // In your server-side endpoint
-// Modify your date filtering logic to this:
-
-// // Helper function to format dates consistently with your database
-// const formatForDBComparison = (momentDate) => {
-//   return momentDate.format("DD-MM-YYYY, h:mm:ss A");
-// };
-
-// // Date In range filter
-// if (dateInStart || dateInEnd) {
-//   query.dateIn = {};
-  
-//   if (dateInStart) {
-//     const startDate = moment(dateInStart, "DD-MM-YYYY").startOf('day');
-//     query.dateIn.$gte = formatForDBComparison(startDate);
-//   }
-  
-//   if (dateInEnd) {
-//     const endDate = moment(dateInEnd, "DD-MM-YYYY").endOf('day');
-//     query.dateIn.$lte = formatForDBComparison(endDate);
-//   }
-  
-//   // Special case: if only start date provided, include whole day
-//   if (dateInStart && !dateInEnd) {
-//     const endOfDay = moment(dateInStart, "DD-MM-YYYY").endOf('day');
-//     query.dateIn.$lte = formatForDBComparison(endOfDay);
-//   }
-// }
-
-// // Date Out range filter (same logic as Date In)
-// if (dateOutStart || dateOutEnd) {
-//   query.dateOut = {};
-  
-//   if (dateOutStart) {
-//     const startDate = moment(dateOutStart, "DD-MM-YYYY").startOf('day');
-//     query.dateOut.$gte = formatForDBComparison(startDate);
-//   }
-  
-//   if (dateOutEnd) {
-//     const endDate = moment(dateOutEnd, "DD-MM-YYYY").endOf('day');
-//     query.dateOut.$lte = formatForDBComparison(endDate);
-//   }
-  
-//   // Special case: if only start date provided, include whole day
-//   if (dateOutStart && !dateOutEnd) {
-//     const endOfDay = moment(dateOutStart, "DD-MM-YYYY").endOf('day');
-//     query.dateOut.$lte = formatForDBComparison(endOfDay);
-//   }
-// }
 // Enhanced date filtering with debugging
  if (dateInStart || dateInEnd) {
       if (dateInStart && dateInEnd) {
@@ -2311,35 +2251,6 @@ Object.entries(filters).forEach(([key, value]) => {
   }
 });
 
-    
-
-    
-
-// Debugging logs
-
-
-    
-    // Date range filters
-    // if (dateInStart || dateInEnd) {
-    //   query.dateIn = {};
-    //   if (dateInStart) {
-    //     query.dateIn.$gte = moment(dateInStart, "DD-MM-YYYY").startOf('day').toDate();
-    //   }
-    //   if (dateInEnd) {
-    //     query.dateIn.$lte = moment(dateInEnd, "DD-MM-YYYY").endOf('day').toDate();
-    //   }
-    // }
-    
-    // if (dateOutStart || dateOutEnd) {
-    //   query.dateOut = {};
-    //   if (dateOutStart) {
-    //     query.dateOut.$gte = moment(dateOutStart, "DD-MM-YYYY").startOf('day').toDate();
-    //   }
-    //   if (dateOutEnd) {
-    //     query.dateOut.$lte = moment(dateOutEnd, "DD-MM-YYYY").endOf('day').toDate();
-    //   }
-    // }
-    
     if (sentDate) {
       query.sentDate = {
         $regex: `^${sentDate}`,
@@ -2357,13 +2268,25 @@ Object.entries(filters).forEach(([key, value]) => {
       if (!user) {
         return res.status(404).json({ success: false, message: "User not found" });
       }
-      
+
       query = {
+    $and: [
+      query, // Keep all existing filters
+      {
         $or: [
           { userId: user.userId },
           { clientCode: user.clientCode }
         ]
-      };
+      }
+    ]
+  };
+      
+      // query = {
+      //   $or: [
+      //     { userId: user.userId },
+      //     { clientCode: user.clientCode }
+      //   ]
+      // };
     } else {
       return res.status(400).json({ success: false, message: "Invalid role specified" });
     }
