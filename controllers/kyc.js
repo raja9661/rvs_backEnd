@@ -332,9 +332,9 @@ exports.singleUpload = async (req, res) => {
 
     const bestMatch = await findBestMatch(product);
     standardized = bestMatch || {
-    updatedName: product,
-    upn: "",
-    productType: "",
+    updatedName: "Not Mapped",
+    upn: "Not Mapped",
+    productType: "Not Mapped",
     };
 
     }
@@ -423,6 +423,277 @@ exports.singleUpload = async (req, res) => {
 
 
 // Bulk KYC Upload (Handsontable)
+// exports.bulkUpload = async (req, res) => {
+//   try {
+//     const { data } = req.body;
+
+//     if (!data || !Array.isArray(data) || data.length === 0) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid or empty data",
+//       });
+//     }
+
+//     const currentDate = moment().format("YYYY-MM-DD");
+//     const results = {
+//       inserted: 0,
+//       fileDuplicates: 0,
+//       dbDuplicates: 0,
+//       failed: 0,
+//       failedRecords: [],
+//     };
+
+//     const fileDuplicateTracker = new Set();
+//     const insertDocs = [];
+//     const dbKeys = [];
+//     const uniqueUserIds = new Set();
+//     const userIdClientCodeMap = new Map();
+//     const clientCodeSet = new Set();
+
+//     // Preprocess and validate input
+//     for (const row of data) {
+//       const accountNumber = String(row.accountNumber || "").trim();
+//       const product = String(row.product || "").trim();
+//       const requirement = String(row.requirement || "").trim();
+//       const name = String(row.name || "").trim();
+//       const userId = row.userId?.trim();
+//       const clientId = row.clientId?.trim();
+//       const ReferBy = row.ReferBy?.trim();
+
+//       if (!userId) {
+//         return res.status(400).json({ success: false, message: "User ID is required" });
+//       }
+
+//       if (!name || !accountNumber || !product || !requirement) {
+//         results.failed++;
+//         results.failedRecords.push({ ...row, error: "Missing required fields" });
+//         continue;
+//       }
+
+//       const key = `${accountNumber}-${product}-${requirement}-${clientId || ""}`;
+//       if (fileDuplicateTracker.has(key)) {
+//         results.fileDuplicates++;
+//         continue;
+//       }
+//       fileDuplicateTracker.add(key);
+
+//       dbKeys.push({ accountNumber, product, requirement, clientCode: clientId });
+//       if (userId) uniqueUserIds.add(userId);
+//       if (clientId) clientCodeSet.add(clientId);
+
+//       insertDocs.push({
+//         original: row,
+//         key,
+//         name,
+//         product,
+//         accountNumber,
+//         requirement,
+//         userId,
+//         clientId,
+//         ReferBy,
+//       });
+//     }
+
+//     // Step 1: Preload Users
+//     const users = await User.find({
+//       $or: [
+//         { userId: { $in: Array.from(uniqueUserIds) } },
+//         { clientCode: { $in: Array.from(clientCodeSet) } }
+//       ]
+//     });
+//     users.forEach(user => {
+//       if (user.userId) userIdClientCodeMap.set(user.userId, user.clientCode);
+//     });
+
+//     // Step 2: Preload same-day existing KYC records
+//     const existingRecords = await KYC.find({
+//       $or: dbKeys.map(key => ({
+//         accountNumber: key.accountNumber,
+//         product: key.product,
+//         requirement: key.requirement,
+//         clientCode: key.clientCode,
+//         createdAt: {
+//           $gte: new Date(`${currentDate}T00:00:00Z`),
+//           $lt: new Date(`${currentDate}T23:59:59Z`),
+//         },
+//       })),
+//     });
+
+//     const existingSet = new Set(
+//       existingRecords.map(
+//         r => `${r.accountNumber}-${r.product}-${r.requirement}-${r.clientCode}`
+//       )
+//     );
+
+//     // Step 3: Process Data
+//     const bulkInsert = [];
+
+//     for (const item of insertDocs) {
+//       const {
+//         original,
+//         name,
+//         product,
+//         accountNumber,
+//         requirement,
+//         userId,
+//         clientId,
+//         ReferBy,
+//         key,
+//       } = item;
+
+//       let userclientcode = "";
+//       let NameUploadBy = userId;
+
+//       if (userId && clientId) {
+//         const user = users.find(u => u.clientCode === clientId);
+//         if (!user) {
+//           results.failed++;
+//           results.failedRecords.push({ ...original, error: `No user found with client code ${clientId}` });
+//           continue;
+//         }
+//         userclientcode = clientId;
+//       } else if (userId && !clientId) {
+//         const user = users.find(u => u.userId === userId);
+//         if (!user) {
+//           results.failed++;
+//           results.failedRecords.push({ ...original, error: `No user found with userId ${userId}` });
+//           continue;
+//         }
+//         userclientcode = user.clientCode;
+//       }
+
+//       const uniqueKey = `${accountNumber}-${product}-${requirement}-${userclientcode}`;
+//       if (existingSet.has(uniqueKey)) {
+//         results.dbDuplicates++;
+//         continue;
+//       }
+
+//       // Standardize product
+//     const normalizedProduct = normalizeProductName(product);
+//     const manualMapping = await Product.findOne({ productName: normalizedProduct });
+//     let  standardized = ""
+//     if(manualMapping){
+//       standardized = {
+//       updatedName: manualMapping.updatedProduct,
+//       upn: manualMapping.correctUPN,
+//       productType: manualMapping.productType,
+//     };
+//     }else{
+
+//     const bestMatch = await findBestMatch(product);
+//     standardized = bestMatch || {
+//     updatedName: product,
+//     upn: "",
+//     productType: "",
+//     };
+
+//     }
+
+//       let isduplicate = false;
+//       if (standardized.productType === "ITO") {
+//         const existingITO = await KYC.find({
+//           accountNumber,
+//           product:normalizedProduct,
+//         });
+//         if (existingITO.length > 0) {
+//           isduplicate = true;
+//           for (const record of existingITO) {
+//             record.isDedup = true;
+//             await record.save();
+//           }
+//         }
+//       }
+
+//       const employees = await ClientCode.find({ clientCode: userclientcode });
+//       const empName = employees[0]?.EmployeeName || "";
+//       let customerCare = "";
+//       if (empName) {
+//         const employee = await User.findOne({ name: empName });
+//         customerCare = employee?.phoneNumber || "";
+//       }
+
+//       const vendor = await Vendor.findOne({
+//         productName: standardized.updatedName,
+//         vendorType: 'default'
+//       });
+//       const vendorName = vendor?.vendorName || "not found";
+
+//       let ipAddress = getIPAddress(req);
+//       if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
+//         try {
+//           const ipRes = await axios.get("https://api64.ipify.org?format=json");
+//           ipAddress = ipRes.data.ip;
+//         } catch {
+//           ipAddress = "unknown";
+//         }
+//       }
+
+//       const date = new Date();
+//       const uniqueCaseId = await generateUniqueCaseId()
+
+//       bulkInsert.push({
+//         name,
+//         product,
+//         accountNumber,
+//         requirement,
+//         userId,
+//         caseId: uniqueCaseId || generateCaseId(),
+//         dateIn: getFormattedDateTime(),
+//         dateInDate: getFormattedDateDay(),
+//         accountNumberDigit: countDigits(accountNumber),
+//         correctUPN: standardized.upn,
+//         productType: standardized.productType,
+//         updatedProductName: standardized.updatedName,
+//         clientCode: userclientcode,
+//         listByEmployee: empName,
+//         clientType: await getClientType(userclientcode),
+//         vendorName,
+//         customerCare,
+//         NameUploadBy,
+//         ipAddress,
+//         ReferBy: ReferBy || "",
+//         isDedup: isduplicate,
+//         year: date.getFullYear().toString(),
+//         month: (date.getMonth() + 1).toString().padStart(2, '0')
+//       });
+//     }
+
+//     // Step 4: Bulk Insert
+//     if (bulkInsert.length > 0) {
+//       await KYC.insertMany(bulkInsert);
+//       results.inserted = bulkInsert.length;
+//     }
+
+//     // Step 5: Final response
+//     if (results.inserted === 0 && results.failed === data.length) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Please check client-code is assigned with active client",
+//         details: results,
+//       });
+//     }
+
+//     res.json({
+//       success: true,
+//       message: `Processed ${data.length} records`,
+//       stats: {
+//         totalRecords: data.length,
+//         inserted: results.inserted,
+//         fileDuplicates: results.fileDuplicates,
+//         dbDuplicates: results.dbDuplicates,
+//         failed: results.failed,
+//         failedRecords: results.failedRecords,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Bulk Upload Error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Bulk upload failed",
+//       error: error.message,
+//     });
+//   }
+// };
 exports.bulkUpload = async (req, res) => {
   try {
     const { data } = req.body;
@@ -447,10 +718,26 @@ exports.bulkUpload = async (req, res) => {
     const insertDocs = [];
     const dbKeys = [];
     const uniqueUserIds = new Set();
-    const userIdClientCodeMap = new Map();
     const clientCodeSet = new Set();
 
-    // Preprocess and validate input
+    // STEP 1: Collect IDs for preloading
+    for (const row of data) {
+      const userId = row.userId?.trim();
+      const clientId = row.clientId?.trim();
+
+      if (userId) uniqueUserIds.add(userId);
+      if (clientId) clientCodeSet.add(clientId);
+    }
+
+    // STEP 2: Preload Users for mapping
+    const users = await User.find({
+      $or: [
+        { userId: { $in: Array.from(uniqueUserIds) } },
+        { clientCode: { $in: Array.from(clientCodeSet) } }
+      ]
+    });
+
+    // STEP 3: Preprocess rows & build dbKeys
     for (const row of data) {
       const accountNumber = String(row.accountNumber || "").trim();
       const product = String(row.product || "").trim();
@@ -463,49 +750,61 @@ exports.bulkUpload = async (req, res) => {
       if (!userId) {
         return res.status(400).json({ success: false, message: "User ID is required" });
       }
-
       if (!name || !accountNumber || !product || !requirement) {
         results.failed++;
         results.failedRecords.push({ ...row, error: "Missing required fields" });
         continue;
       }
 
-      const key = `${accountNumber}-${product}-${requirement}-${clientId || ""}`;
-      if (fileDuplicateTracker.has(key)) {
+      // Resolve actual clientCode (same logic as singleUpload)
+      let resolvedClientCode = "";
+      if (userId && clientId) {
+        const user = users.find(u => u.clientCode === clientId);
+        if (!user) {
+          results.failed++;
+          results.failedRecords.push({ ...row, error: `No user found with client code ${clientId}` });
+          continue;
+        }
+        resolvedClientCode = clientId;
+      } else if (userId && !clientId) {
+        const user = users.find(u => u.userId === userId);
+        if (!user) {
+          results.failed++;
+          results.failedRecords.push({ ...row, error: `No user found with userId ${userId}` });
+          continue;
+        }
+        resolvedClientCode = user.clientCode;
+      }
+
+      // Check for file-level duplicate
+      const fileKey = `${accountNumber}-${product}-${requirement}-${resolvedClientCode}`;
+      if (fileDuplicateTracker.has(fileKey)) {
         results.fileDuplicates++;
         continue;
       }
-      fileDuplicateTracker.add(key);
+      fileDuplicateTracker.add(fileKey);
 
-      dbKeys.push({ accountNumber, product, requirement, clientCode: clientId });
-      if (userId) uniqueUserIds.add(userId);
-      if (clientId) clientCodeSet.add(clientId);
+      // Add to dbKeys for same-day DB duplicate check
+      dbKeys.push({
+        accountNumber,
+        product,
+        requirement,
+        clientCode: resolvedClientCode
+      });
 
       insertDocs.push({
         original: row,
-        key,
         name,
         product,
         accountNumber,
         requirement,
         userId,
-        clientId,
-        ReferBy,
+        clientCode: resolvedClientCode,
+        ReferBy
       });
     }
 
-    // Step 1: Preload Users
-    const users = await User.find({
-      $or: [
-        { userId: { $in: Array.from(uniqueUserIds) } },
-        { clientCode: { $in: Array.from(clientCodeSet) } }
-      ]
-    });
-    users.forEach(user => {
-      if (user.userId) userIdClientCodeMap.set(user.userId, user.clientCode);
-    });
-
-    // Step 2: Preload same-day existing KYC records
+    // STEP 4: Preload existing same-day KYC records
     const existingRecords = await KYC.find({
       $or: dbKeys.map(key => ({
         accountNumber: key.accountNumber,
@@ -525,76 +824,40 @@ exports.bulkUpload = async (req, res) => {
       )
     );
 
-    // Step 3: Process Data
+    // STEP 5: Process insertable docs
     const bulkInsert = [];
-
     for (const item of insertDocs) {
-      const {
-        original,
-        name,
-        product,
-        accountNumber,
-        requirement,
-        userId,
-        clientId,
-        ReferBy,
-        key,
-      } = item;
+      const { original, name, product, accountNumber, requirement, userId, clientCode, ReferBy } = item;
 
-      let userclientcode = "";
-      let NameUploadBy = userId;
-
-      if (userId && clientId) {
-        const user = users.find(u => u.clientCode === clientId);
-        if (!user) {
-          results.failed++;
-          results.failedRecords.push({ ...original, error: `No user found with client code ${clientId}` });
-          continue;
-        }
-        userclientcode = clientId;
-      } else if (userId && !clientId) {
-        const user = users.find(u => u.userId === userId);
-        if (!user) {
-          results.failed++;
-          results.failedRecords.push({ ...original, error: `No user found with userId ${userId}` });
-          continue;
-        }
-        userclientcode = user.clientCode;
-      }
-
-      const uniqueKey = `${accountNumber}-${product}-${requirement}-${userclientcode}`;
+      const uniqueKey = `${accountNumber}-${product}-${requirement}-${clientCode}`;
       if (existingSet.has(uniqueKey)) {
         results.dbDuplicates++;
         continue;
       }
 
       // Standardize product
-    const normalizedProduct = normalizeProductName(product);
-    const manualMapping = await Product.findOne({ productName: normalizedProduct });
-    let  standardized = ""
-    if(manualMapping){
-      standardized = {
-      updatedName: manualMapping.updatedProduct,
-      upn: manualMapping.correctUPN,
-      productType: manualMapping.productType,
-    };
-    }else{
+      const normalizedProduct = normalizeProductName(product);
+      const manualMapping = await Product.findOne({ productName: normalizedProduct });
+      let standardized = {};
+      if (manualMapping) {
+        standardized = {
+          updatedName: manualMapping.updatedProduct,
+          upn: manualMapping.correctUPN,
+          productType: manualMapping.productType,
+        };
+      } else {
+        const bestMatch = await findBestMatch(product);
+        standardized = bestMatch || {
+        updatedName: "Not Mapped",
+        upn: "Not Mapped",
+        productType: "Not Mapped",
+        };
+      }
 
-    const bestMatch = await findBestMatch(product);
-    standardized = bestMatch || {
-    updatedName: product,
-    upn: "",
-    productType: "",
-    };
-
-    }
-
+      // ITO Dedup
       let isduplicate = false;
       if (standardized.productType === "ITO") {
-        const existingITO = await KYC.find({
-          accountNumber,
-          product:normalizedProduct,
-        });
+        const existingITO = await KYC.find({ accountNumber, product: normalizedProduct });
         if (existingITO.length > 0) {
           isduplicate = true;
           for (const record of existingITO) {
@@ -604,7 +867,8 @@ exports.bulkUpload = async (req, res) => {
         }
       }
 
-      const employees = await ClientCode.find({ clientCode: userclientcode });
+      // Employee / Customer care
+      const employees = await ClientCode.find({ clientCode });
       const empName = employees[0]?.EmployeeName || "";
       let customerCare = "";
       if (empName) {
@@ -612,12 +876,14 @@ exports.bulkUpload = async (req, res) => {
         customerCare = employee?.phoneNumber || "";
       }
 
+      // Vendor
       const vendor = await Vendor.findOne({
         productName: standardized.updatedName,
         vendorType: 'default'
       });
       const vendorName = vendor?.vendorName || "not found";
 
+      // IP address
       let ipAddress = getIPAddress(req);
       if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
         try {
@@ -629,7 +895,7 @@ exports.bulkUpload = async (req, res) => {
       }
 
       const date = new Date();
-      const uniqueCaseId = await generateUniqueCaseId()
+      const uniqueCaseId = await generateUniqueCaseId();
 
       bulkInsert.push({
         name,
@@ -644,12 +910,12 @@ exports.bulkUpload = async (req, res) => {
         correctUPN: standardized.upn,
         productType: standardized.productType,
         updatedProductName: standardized.updatedName,
-        clientCode: userclientcode,
+        clientCode,
         listByEmployee: empName,
-        clientType: await getClientType(userclientcode),
+        clientType: await getClientType(clientCode),
         vendorName,
         customerCare,
-        NameUploadBy,
+        NameUploadBy: userId,
         ipAddress,
         ReferBy: ReferBy || "",
         isDedup: isduplicate,
@@ -658,13 +924,13 @@ exports.bulkUpload = async (req, res) => {
       });
     }
 
-    // Step 4: Bulk Insert
+    // STEP 6: Bulk insert
     if (bulkInsert.length > 0) {
       await KYC.insertMany(bulkInsert);
       results.inserted = bulkInsert.length;
     }
 
-    // Step 5: Final response
+    // STEP 7: Response
     if (results.inserted === 0 && results.failed === data.length) {
       return res.status(400).json({
         success: false,
@@ -694,6 +960,7 @@ exports.bulkUpload = async (req, res) => {
     });
   }
 };
+
 
 // exports.bulkUpload = async (req, res) => {
 //   try {
@@ -1184,9 +1451,9 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
 
     const bestMatch = await findBestMatch(product);
     standardized = bestMatch || {
-    updatedName: product,
-    upn: "",
-    productType: "",
+     updatedName: "Not Mapped",
+     upn: "Not Mapped",
+     productType: "Not Mapped",
     };
 
     }
@@ -1784,7 +2051,35 @@ exports.updateColumnConfig = async (req, res) => {
 // Updated getTrackerData function using column config
 exports.getTrackerData = async (req, res) => {
   try {
-    const { role, userId, name } = req.query;
+    const { 
+      role, 
+      userId, 
+      name, 
+      page = 1, 
+      pageSize = 50,
+      searchQuery = "",
+      // Filter parameters
+      product,
+      productType,
+      status,
+      caseStatus,
+      dateInStart,
+      dateInEnd,
+      dateOutStart,
+      dateOutEnd,
+      sentDate,
+      vendorStatus,
+      priority,
+      clientType,
+       ...filters
+    } = req.query;
+    
+    const skip = (page - 1) * pageSize;
+
+    // In your server endpoint, before the query
+
+
+// After building the query
     
     // Get column order for this role
     const config = await ColumnConfig.findOne({ role });
@@ -1805,11 +2100,256 @@ exports.getTrackerData = async (req, res) => {
     projection._id = 0;
     
     let query = {};
-    let populateOptions = [];
     
+    // Search functionality
+    if (searchQuery) {
+  const regex = { $regex: searchQuery, $options: "i" };
+
+  query.$or = [
+    { caseId: regex },
+    { userId: regex },
+    { remarks: regex },
+    { name: regex },
+    { details: regex },
+    { details1: regex },
+    { priority: regex },
+    { correctUPN: regex },
+    { product: regex },
+    { updatedProductName: regex },
+    { accountNumber: regex },
+    { requirement: regex },
+    { updatedRequirement: regex },
+    { accountNumberDigit: regex },
+    { bankCode: regex },
+    { clientCode: regex },
+    { vendorName: regex },
+    { dateIn: regex },
+    { dateInDate: regex },
+    { status: regex },
+    { caseStatus: regex },
+    { productType: regex },
+    { listByEmployee: regex },
+    { dateOut: regex },
+    { dateOutInDay: regex },
+    { sentBy: regex },
+    { autoOrManual: regex },
+    { caseDoneBy: regex },
+    { clientTAT: regex },
+    { customerCare: regex },
+    { sentDate: regex },
+    { sentDateInDay: regex },
+    { clientType: regex },
+    { dedupBy: regex },
+    { vendorRate: regex },
+    { clientRate: regex },
+    { NameUploadBy: regex },
+    { ReferBy: regex },
+    { ipAddress: regex },
+    { vendorStatus: regex },
+    { year: regex },
+    { month: regex },
+    { role: regex },
+    { "attachments.filename": regex },
+    { "attachments.originalname": regex },
+    { "attachments.key": regex }
+  ];
+}
+
+    // if (searchQuery) {
+    //   query.$or = [
+    //     { caseId: { $regex: searchQuery, $options: 'i' } },
+    //     { accountNumber: { $regex: searchQuery, $options: 'i' } },
+    //     { name: { $regex: searchQuery, $options: 'i' } },
+    //     { clientCode: { $regex: searchQuery, $options: 'i' } },
+    //     { bankCode: { $regex: searchQuery, $options: 'i' } },
+    //     { details: { $regex: searchQuery, $options: 'i' } },
+    //     { remarks: { $regex: searchQuery, $options: 'i' } }
+    //   ];
+    // }
+    
+    // Apply filters
+    if (product) query.product = product;
+    if (productType) query.productType = productType;
+    if (status) query.status = status;
+    if (caseStatus) query.caseStatus = caseStatus;
+    if (vendorStatus) query.vendorStatus = vendorStatus;
+    if (priority) query.priority = priority;
+    if (clientType) query.clientType = clientType;
+
+    // In your server-side endpoint
+// Modify your date filtering logic to this:
+
+// // Helper function to format dates consistently with your database
+// const formatForDBComparison = (momentDate) => {
+//   return momentDate.format("DD-MM-YYYY, h:mm:ss A");
+// };
+
+// // Date In range filter
+// if (dateInStart || dateInEnd) {
+//   query.dateIn = {};
+  
+//   if (dateInStart) {
+//     const startDate = moment(dateInStart, "DD-MM-YYYY").startOf('day');
+//     query.dateIn.$gte = formatForDBComparison(startDate);
+//   }
+  
+//   if (dateInEnd) {
+//     const endDate = moment(dateInEnd, "DD-MM-YYYY").endOf('day');
+//     query.dateIn.$lte = formatForDBComparison(endDate);
+//   }
+  
+//   // Special case: if only start date provided, include whole day
+//   if (dateInStart && !dateInEnd) {
+//     const endOfDay = moment(dateInStart, "DD-MM-YYYY").endOf('day');
+//     query.dateIn.$lte = formatForDBComparison(endOfDay);
+//   }
+// }
+
+// // Date Out range filter (same logic as Date In)
+// if (dateOutStart || dateOutEnd) {
+//   query.dateOut = {};
+  
+//   if (dateOutStart) {
+//     const startDate = moment(dateOutStart, "DD-MM-YYYY").startOf('day');
+//     query.dateOut.$gte = formatForDBComparison(startDate);
+//   }
+  
+//   if (dateOutEnd) {
+//     const endDate = moment(dateOutEnd, "DD-MM-YYYY").endOf('day');
+//     query.dateOut.$lte = formatForDBComparison(endDate);
+//   }
+  
+//   // Special case: if only start date provided, include whole day
+//   if (dateOutStart && !dateOutEnd) {
+//     const endOfDay = moment(dateOutStart, "DD-MM-YYYY").endOf('day');
+//     query.dateOut.$lte = formatForDBComparison(endOfDay);
+//   }
+// }
+// Enhanced date filtering with debugging
+ if (dateInStart || dateInEnd) {
+      if (dateInStart && dateInEnd) {
+        // RANGE QUERY - handle as string comparison
+        const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+        const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+        
+        if (startDate === endDate) {
+          // Single day
+          query.dateIn = { $regex: `^${startDate}` };
+        } else {
+          // Date range - compare as strings
+          query.$and = [
+            { 
+              dateIn: { 
+                $gte: `${startDate}, 00:00:00 AM`,
+                $lte: `${endDate}, 11:59:59 PM`
+              }
+            }
+          ];
+        }
+      }
+      else if (dateInStart) {
+        // Single start date
+        const dateStr = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+        query.dateIn = { $regex: `^${dateStr}` };
+      }
+      else if (dateInEnd) {
+        // Single end date
+        const dateStr = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+        query.dateIn = { $lte: `${dateStr}, 11:59:59 PM` };
+      }
+    }
+
+    // DATE OUT FILTER (same logic)
+    if (dateOutStart || dateOutEnd) {
+  // Initialize dateOut filter object
+  const dateOutFilter = {};
+  
+  // Format dates consistently
+  const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+  const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+
+  // Case 1: Both start and end dates provided
+  if (startDateStr && endDateStr) {
+    if (startDateStr === endDateStr) {
+      // Single day match - use regex for exact day
+      dateOutFilter.$regex = `^${startDateStr}`;
+    } else {
+      // Date range - use string comparison
+      dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
+      dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+    }
+  }
+  // Case 2: Only start date provided
+  else if (startDateStr) {
+    dateOutFilter.$regex = `^${startDateStr}`;
+  }
+  // Case 3: Only end date provided
+  else if (endDateStr) {
+    dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+  }
+
+  // Only apply the filter if we have valid conditions
+  if (Object.keys(dateOutFilter).length > 0) {
+    // Exclude empty dateOut values and apply the filter
+    query.dateOut = {
+      ...dateOutFilter,
+      $ne: "", // Exclude empty values
+      $exists: true // Ensure field exists
+    };
+
+    // For range queries, we need to ensure we don't match invalid date strings
+    if (dateOutFilter.$gte || dateOutFilter.$lte) {
+      query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
+    }
+  }
+}
+
+
+Object.entries(filters).forEach(([key, value]) => {
+  if (Array.isArray(value) && value.length > 0) {
+    query[key] = { $in: value };
+  }
+});
+
+    
+
+    
+
+// Debugging logs
+
+
+    
+    // Date range filters
+    // if (dateInStart || dateInEnd) {
+    //   query.dateIn = {};
+    //   if (dateInStart) {
+    //     query.dateIn.$gte = moment(dateInStart, "DD-MM-YYYY").startOf('day').toDate();
+    //   }
+    //   if (dateInEnd) {
+    //     query.dateIn.$lte = moment(dateInEnd, "DD-MM-YYYY").endOf('day').toDate();
+    //   }
+    // }
+    
+    // if (dateOutStart || dateOutEnd) {
+    //   query.dateOut = {};
+    //   if (dateOutStart) {
+    //     query.dateOut.$gte = moment(dateOutStart, "DD-MM-YYYY").startOf('day').toDate();
+    //   }
+    //   if (dateOutEnd) {
+    //     query.dateOut.$lte = moment(dateOutEnd, "DD-MM-YYYY").endOf('day').toDate();
+    //   }
+    // }
+    
+    if (sentDate) {
+      query.sentDate = {
+        $regex: `^${sentDate}`,
+        $options: 'i'
+      };
+    }
+    
+    // Role-based query conditions
     if (role === "admin") {
-      // No additional query filters for admin
-      populateOptions = [{ path: "userId", select: "name email phoneNumber userId" }];
+      // No additional filters for admin
     } else if (role === "employee") {
       query.listByEmployee = name;
     } else if (role === "client") {
@@ -1824,15 +2364,17 @@ exports.getTrackerData = async (req, res) => {
           { clientCode: user.clientCode }
         ]
       };
-      
-      populateOptions = [{ path: "userId", select: "name email phoneNumber userId" }];
     } else {
       return res.status(400).json({ success: false, message: "Invalid role specified" });
     }
     
-    const trackerData = await KYC.find(query, projection)
-      .populate(...populateOptions)
-      .sort({ _id: -1 });
+    const [trackerData, totalCount] = await Promise.all([
+      KYC.find(query, projection,filters)
+        .sort({ _id: -1 })
+        .skip(skip)
+        .limit(parseInt(pageSize)),
+      KYC.countDocuments(query)
+    ]);
     
     const orderedData = trackerData.map(doc => orderFields(doc, columnOrder));
     
@@ -1840,19 +2382,304 @@ exports.getTrackerData = async (req, res) => {
     if (role === "employee") {
       const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
       const editableColumns = employeeAccess?.editableColumns || [];
-      return res.json({ data: orderedData, editableColumns });
+      return res.json({ 
+        data: orderedData, 
+        editableColumns,
+        pagination: {
+          total: totalCount,
+          page: parseInt(page),
+          pageSize: parseInt(pageSize),
+          totalPages: Math.ceil(totalCount / pageSize)
+        }
+      });
     } else if (role === "client") {
       const clientAccess = await ClientAccess.findOne({ clientName: name });
       const editableColumns = clientAccess?.editableColumns || [];
-      return res.json({ data: orderedData, editableColumns });
+      return res.json({ 
+        data: orderedData, 
+        editableColumns,
+        pagination: {
+          total: totalCount,
+          page: parseInt(page),
+          pageSize: parseInt(pageSize),
+          totalPages: Math.ceil(totalCount / pageSize)
+        }
+      });
     }
     
-    res.json(orderedData);
+    res.json({
+      data: orderedData,
+      pagination: {
+        total: totalCount,
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        totalPages: Math.ceil(totalCount / pageSize)
+      }
+    });
   } catch (error) {
     console.error("Error fetching tracker data:", error);
     res.status(500).json({ success: false, message: "Failed to fetch data" });
   }
 };
+// exports.getTrackerData = async (req, res) => {
+//   try {
+//     const { 
+//       role, 
+//       userId, 
+//       name, 
+//       page = 1, 
+//       pageSize = 50,
+//       searchQuery = "",
+//       // Filter parameters
+//       product,
+//       productType,
+//       status,
+//       caseStatus,
+//       dateInStart,
+//       dateInEnd,
+//       dateOutStart,
+//       dateOutEnd,
+//       sentDate,
+//       vendorStatus,
+//       priority,
+//       clientType
+//     } = req.query;
+    
+//     const skip = (page - 1) * pageSize;
+    
+//     // Get column order for this role
+//     const config = await ColumnConfig.findOne({ role });
+//     let columnOrder = config?.columnOrder;
+    
+//     if (!columnOrder) {
+//       // Fallback to all fields if no config exists
+//       columnOrder = Object.keys(KYC.schema.paths).filter(
+//         field => !['_id', '__v', 'createdAt','userId', 'updatedAt'].includes(field)
+//       );
+//     }
+    
+//     // Build projection based on column order
+//     const projection = {};
+//     columnOrder.forEach(field => {
+//       projection[field] = 1;
+//     });
+//     projection._id = 0;
+    
+//     let query = {};
+    
+//     // Search functionality
+//     if (searchQuery) {
+//       query.$or = [
+//         { caseId: { $regex: searchQuery, $options: 'i' } },
+//         { accountNumber: { $regex: searchQuery, $options: 'i' } },
+//         { name: { $regex: searchQuery, $options: 'i' } },
+//         { clientCode: { $regex: searchQuery, $options: 'i' } },
+//         { bankCode: { $regex: searchQuery, $options: 'i' } },
+//         { details: { $regex: searchQuery, $options: 'i' } },
+//         { remarks: { $regex: searchQuery, $options: 'i' } }
+//       ];
+//     }
+    
+//     // Apply filters
+//     if (product) query.product = product;
+//     if (productType) query.productType = productType;
+//     if (status) query.status = status;
+//     if (caseStatus) query.caseStatus = caseStatus;
+//     if (vendorStatus) query.vendorStatus = vendorStatus;
+//     if (priority) query.priority = priority;
+//     if (clientType) query.clientType = clientType;
+    
+//     // Date range filters
+//     if (dateInStart || dateInEnd) {
+//       query.dateIn = {};
+//       if (dateInStart) {
+//         query.dateIn.$gte = moment(dateInStart, "DD-MM-YYYY").startOf('day').toDate();
+//       }
+//       if (dateInEnd) {
+//         query.dateIn.$lte = moment(dateInEnd, "DD-MM-YYYY").endOf('day').toDate();
+//       }
+//     }
+    
+//     if (dateOutStart || dateOutEnd) {
+//       query.dateOut = {};
+//       if (dateOutStart) {
+//         query.dateOut.$gte = moment(dateOutStart, "DD-MM-YYYY").startOf('day').toDate();
+//       }
+//       if (dateOutEnd) {
+//         query.dateOut.$lte = moment(dateOutEnd, "DD-MM-YYYY").endOf('day').toDate();
+//       }
+//     }
+    
+//     if (sentDate) {
+//       query.sentDate = {
+//         $regex: `^${sentDate}`,
+//         $options: 'i'
+//       };
+//     }
+    
+//     // Role-based query conditions
+//     if (role === "admin") {
+//       // No additional filters for admin
+//     } else if (role === "employee") {
+//       query.listByEmployee = name;
+//     } else if (role === "client") {
+//       const user = await User.findOne({ userId });
+//       if (!user) {
+//         return res.status(404).json({ success: false, message: "User not found" });
+//       }
+      
+//       query = {
+//         $or: [
+//           { userId: user.userId },
+//           { clientCode: user.clientCode }
+//         ]
+//       };
+//     } else {
+//       return res.status(400).json({ success: false, message: "Invalid role specified" });
+//     }
+    
+//     const [trackerData, totalCount] = await Promise.all([
+//       KYC.find(query, projection)
+//         .sort({ _id: -1 })
+//         .skip(skip)
+//         .limit(parseInt(pageSize)),
+//       KYC.countDocuments(query)
+//     ]);
+    
+//     const orderedData = trackerData.map(doc => orderFields(doc, columnOrder));
+    
+//     // Include editable columns if needed
+//     if (role === "employee") {
+//       const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
+//       const editableColumns = employeeAccess?.editableColumns || [];
+//       return res.json({ 
+//         data: orderedData, 
+//         editableColumns,
+//         pagination: {
+//           total: totalCount,
+//           page: parseInt(page),
+//           pageSize: parseInt(pageSize),
+//           totalPages: Math.ceil(totalCount / pageSize)
+//         }
+//       });
+//     } else if (role === "client") {
+//       const clientAccess = await ClientAccess.findOne({ clientName: name });
+//       const editableColumns = clientAccess?.editableColumns || [];
+//       return res.json({ 
+//         data: orderedData, 
+//         editableColumns,
+//         pagination: {
+//           total: totalCount,
+//           page: parseInt(page),
+//           pageSize: parseInt(pageSize),
+//           totalPages: Math.ceil(totalCount / pageSize)
+//         }
+//       });
+//     }
+    
+//     res.json({
+//       data: orderedData,
+//       pagination: {
+//         total: totalCount,
+//         page: parseInt(page),
+//         pageSize: parseInt(pageSize),
+//         totalPages: Math.ceil(totalCount / pageSize)
+//       }
+//     });
+//   } catch (error) {
+//     console.error("Error fetching tracker data:", error);
+//     res.status(500).json({ success: false, message: "Failed to fetch data" });
+//   }
+// };
+// exports.getTrackerData = async (req, res) => {
+//   try {
+//     const { role, userId, name , page = 1, pageSize = 50} = req.query;
+//     const skip = (page - 1) * pageSize;
+    
+//     // Get column order for this role
+//     const config = await ColumnConfig.findOne({ role });
+//     let columnOrder = config?.columnOrder;
+    
+//     if (!columnOrder) {
+//       // Fallback to all fields if no config exists
+//       columnOrder = Object.keys(KYC.schema.paths).filter(
+//         field => !['_id', '__v', 'createdAt','userId', 'updatedAt'].includes(field)
+//       );
+//     }
+    
+//     // Build projection based on column order
+//     const projection = {};
+//     columnOrder.forEach(field => {
+//       projection[field] = 1;
+//     });
+//     projection._id = 0;
+    
+//     let query = {};
+//     let populateOptions = [];
+    
+//     if (role === "admin") {
+//       // No additional query filters for admin
+//       populateOptions = [{ path: "userId", select: "name email phoneNumber userId" }];
+//     } else if (role === "employee") {
+//       query.listByEmployee = name;
+//     } else if (role === "client") {
+//       const user = await User.findOne({ userId });
+//       if (!user) {
+//         return res.status(404).json({ success: false, message: "User not found" });
+//       }
+      
+//       query = {
+//         $or: [
+//           { userId: user.userId },
+//           { clientCode: user.clientCode }
+//         ]
+//       };
+      
+//       populateOptions = [{ path: "userId", select: "name email phoneNumber userId" }];
+//     } else {
+//       return res.status(400).json({ success: false, message: "Invalid role specified" });
+//     }
+    
+//     // const trackerData = await KYC.find(query, projection)
+//     //   .populate(...populateOptions)
+//     //   .sort({ _id: -1 });
+
+//     const [trackerData, totalCount] = await Promise.all([
+//       KYC.find(query, projection)
+//         .populate(...populateOptions)
+//         .sort({ _id: -1 })
+//         .skip(skip)
+//         .limit(parseInt(pageSize)),
+//       KYC.countDocuments(query)
+//     ]);
+    
+//     const orderedData = trackerData.map(doc => orderFields(doc, columnOrder));
+    
+//     // Include editable columns if needed
+//     if (role === "employee") {
+//       const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
+//       const editableColumns = employeeAccess?.editableColumns || [];
+//       return res.json({ data: orderedData, editableColumns });
+//     } else if (role === "client") {
+//       const clientAccess = await ClientAccess.findOne({ clientName: name });
+//       const editableColumns = clientAccess?.editableColumns || [];
+//       return res.json({ data: orderedData, editableColumns });
+//     }
+    
+//     // res.json(orderedData);
+//     res.json({
+//       data: orderedData,
+//       pagination: {
+//         total: totalCount,
+//         page: parseInt(page),
+//         pageSize: parseInt(pageSize),
+//         totalPages: Math.ceil(totalCount / pageSize)
+//       },});
+//   } catch (error) {
+//     console.error("Error fetching tracker data:", error);
+//     res.status(500).json({ success: false, message: "Failed to fetch data" });
+//   }
+// };
 
 // // Define field orders for each role
 // const FIELD_ORDERS = {
@@ -3307,24 +4134,172 @@ exports.deleteRow = async (req, res) => {
 };
 exports.deletedItems = async (req, res) => {
   try {
-    const { role, userId, name } = req.query;
+    const { 
+      role, 
+      userId, 
+      name,
+      page = 1,
+      pageSize = 50,
+      searchQuery = "",
+      product,
+      productType,
+      status,
+      caseStatus
+    } = req.query;
 
-    // Add any filtering logic you need based on role/user
-    let query = {};
+    const skip = (page - 1) * pageSize;
+    let query = {}; // Empty query for dedicated deleted items collection
+
+    // Role-based filtering if needed
     if (role === "employee") {
       query.userId = userId;
+    } else if (role === "client") {
+      const user = await User.findOne({ userId });
+      query.$or = [
+        { userId: user.userId },
+        { clientCode: user.clientCode }
+      ];
     }
-    // Add other role-based filters as needed
 
-    const deletedItems = await DeletedItems.find(query).sort({ _id: -1 });;
-    res.status(200).json(deletedItems);
+    // Search and other filters
+    if (searchQuery) {
+      query.$or = [
+        { caseId: { $regex: searchQuery, $options: 'i' } },
+        { accountNumber: { $regex: searchQuery, $options: 'i' } },
+        { name: { $regex: searchQuery, $options: 'i' } }
+      ];
+    }
+
+    if (product) query.product = product;
+    if (productType) query.productType = productType;
+    if (status) query.status = status;
+    if (caseStatus) query.caseStatus = caseStatus;
+
+    const totalCount = await DeletedItems.countDocuments(query);
+    const deletedItems = await DeletedItems.find(query)
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(parseInt(pageSize));
+
+    res.status(200).json({
+      deletedItems,
+      pagination: {
+        total: totalCount,
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        totalPages: Math.ceil(totalCount / pageSize)
+      }
+    });
   } catch (error) {
     console.error("Error fetching deleted items:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch deleted items." });
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch deleted items.",
+      error: error.message
+    });
   }
 };
+
+// exports.deletedItems = async (req, res) => {
+//   try {
+//     const { 
+//       role, 
+//       userId, 
+//       name,
+//       page = 1,
+//       pageSize = 50,
+//       searchQuery = "",
+//       // Add any filter parameters you need
+//       product,
+//       productType,
+//       status,
+//       caseStatus
+//     } = req.query;
+
+//     const skip = (page - 1) * pageSize;
+    
+//     // Build the base query
+//     let query = { isDeleted: true }; // Ensure only deleted items
+    
+//     // Role-based filtering
+//     if (role === "employee") {
+//       query.userId = userId;
+//     } else if (role === "client") {
+//       const user = await User.findOne({ userId });
+//       if (!user) {
+//         return res.status(404).json({ success: false, message: "User not found" });
+//       }
+//       query = {
+//         $or: [
+//           { userId: user.userId },
+//           { clientCode: user.clientCode }
+//         ],
+//         isDeleted: true
+//       };
+//     }
+
+//     // Search functionality
+//     if (searchQuery) {
+//       query.$or = [
+//         { caseId: { $regex: searchQuery, $options: 'i' } },
+//         { accountNumber: { $regex: searchQuery, $options: 'i' } },
+//         { name: { $regex: searchQuery, $options: 'i' } }
+//       ];
+//     }
+
+//     // Apply filters
+//     if (product) query.product = product;
+//     if (productType) query.productType = productType;
+//     if (status) query.status = status;
+//     if (caseStatus) query.caseStatus = caseStatus;
+
+//     // Get both the data and total count
+//     const [deletedItems, totalCount] = await Promise.all([
+//       DeletedItems.find(query)
+//         .sort({ _id: -1 })
+//         .skip(skip)
+//         .limit(parseInt(pageSize)),
+//       DeletedItems.countDocuments(query)
+//     ]);
+//     console.log("deletedItems:",deletedItems)
+
+//     res.status(200).json({
+//       deletedItems,
+//       pagination: {
+//         total: totalCount,
+//         page: parseInt(page),
+//         pageSize: parseInt(pageSize),
+//         totalPages: Math.ceil(totalCount / pageSize)
+//       }
+//     });
+//   } catch (error) {
+//     console.error("Error fetching deleted items:", error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: "Failed to fetch deleted items." 
+//     });
+//   }
+// };
+// exports.deletedItems = async (req, res) => {
+//   try {
+//     const { role, userId, name } = req.query;
+
+//     // Add any filtering logic you need based on role/user
+//     let query = {};
+//     if (role === "employee") {
+//       query.userId = userId;
+//     }
+//     // Add other role-based filters as needed
+
+//     const deletedItems = await DeletedItems.find(query).sort({ _id: -1 });;
+//     res.status(200).json(deletedItems);
+//   } catch (error) {
+//     console.error("Error fetching deleted items:", error);
+//     res
+//       .status(500)
+//       .json({ success: false, message: "Failed to fetch deleted items." });
+//   }
+// };
 
 exports.deletePermanently = async (req, res) => {
   const { caseIds } = req.body;
@@ -3681,18 +4656,18 @@ function exportToExcel(res, data, filters) {
 //   }
 // };
 
-async function verifyS3UploadSize(key) {
-  try {
-    const data = await s3.send(new HeadObjectCommand({
-      Bucket: process.env.AWS_BUCKET_NAME,
-      Key: key,
-    }));
-    return data.ContentLength; // Returns actual file size in bytes
-  } catch (error) {
-    console.error('Error verifying S3 upload:', error);
-    return null;
-  }
-}
+// async function verifyS3UploadSize(key) {
+//   try {
+//     const data = await s3.send(new HeadObjectCommand({
+//       Bucket: process.env.AWS_BUCKET_NAME,
+//       Key: key,
+//     }));
+//     return data.ContentLength; // Returns actual file size in bytes
+//   } catch (error) {
+//     console.error('Error verifying S3 upload:', error);
+//     return null;
+//   }
+// }
 exports.uploadSingleAttachment = async (req, res) => {
   try {
     const { caseId } = req.body;
@@ -3758,11 +4733,114 @@ exports.uploadSingleAttachment = async (req, res) => {
   }
 };
 
+// Function to verify object exists in S3
+async function verifyS3KeyExists(key) {
+  try {
+    const data = await s3.send(new HeadObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: key,
+    }));
+    return data.ContentLength || true;
+  } catch (error) {
+    console.error('S3 verification failed (object missing or inaccessible):', error.message);
+    return null;
+  }
+}
+
+// exports.uploadAttachment = async (req, res) => {
+//   try {
+//     // 1. Parse case IDs
+//     let caseIds = Array.isArray(req.body.caseIds)
+//       ? req.body.caseIds
+//       : [req.body.caseIds].filter(Boolean);
+
+//     if (caseIds.length === 0 && typeof req.body.caseIds === 'string') {
+//       try {
+//         caseIds = JSON.parse(req.body.caseIds);
+//       } catch (e) {
+//         caseIds = req.body.caseIds.split(',').map(id => id.trim());
+//       }
+//     }
+
+//     const file = req.file;
+//     console.log("Initial file info:", file);
+
+//     if (!file) {
+//       return res.status(400).json({ success: false, message: "No file uploaded" });
+//     }
+
+//     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid case IDs",
+//         receivedIds: req.body.caseIds,
+//         parsedIds: caseIds
+//       });
+//     }
+
+//     // 2. Check file size and verify in S3 if needed
+//     let actualSize = file.size;
+//     if (file.size === 0) {
+//       const s3Size = await verifyS3KeyExists(file.key);
+//       actualSize = s3Size || 0;
+
+//       if (!s3Size) {
+//         return res.status(500).json({
+//           success: false,
+//           message: "File not found in S3 after upload. Upload may have failed. Please retry.",
+//           key: file.key
+//         });
+//       }
+//     } else {
+//       const s3Verified = await verifyS3KeyExists(file.key);
+//       if (!s3Verified) {
+//         return res.status(500).json({
+//           success: false,
+//           message: "Upload failed: File not present in S3 after upload attempt.",
+//           key: file.key
+//         });
+//       }
+//     }
+
+//     // 3. Prepare attachment metadata
+//     const attachment = {
+//       filename: file.originalname,
+//       originalname: file.originalname,
+//       mimetype: file.mimetype,
+//       size: actualSize,
+//       location: file.location,
+//       key: file.key,
+//       uploadedAt: getFormattedDateTime(),
+//       etag: file.etag
+//     };
+
+//     // 4. Save metadata to DB
+//     const result = await KYC.updateMany(
+//       { caseId: { $in: caseIds } },
+//       { $push: { attachments: attachment } }
+//     );
+
+//     res.status(201).json({
+//       success: true,
+//       message: `File uploaded and attached to ${result.modifiedCount} case(s)`,
+//       attachment
+//     });
+
+//   } catch (error) {
+//     console.error("Upload error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "File upload failed",
+//       error: error.message
+//     });
+//   }
+// };
+
 exports.uploadAttachment = async (req, res) => {
   try {
-    // Parse caseIds (your existing code)
-    let caseIds = Array.isArray(req.body.caseIds) 
-      ? req.body.caseIds 
+    // 1. Parse case IDs
+    let caseIds = Array.isArray(req.body.caseIds)
+      ? req.body.caseIds
       : [req.body.caseIds].filter(Boolean);
 
     if (caseIds.length === 0 && typeof req.body.caseIds === 'string') {
@@ -3773,75 +4851,120 @@ exports.uploadAttachment = async (req, res) => {
       }
     }
 
-    const file = req.file;
-    console.log("Initial file info:", file);
+    const files = req.files; // Changed from req.file to req.files
+    console.log("Files received:", files?.length);
 
-    if (!file) {
-      return res.status(400).json({ success: false, message: "No file uploaded" });
+    if (!files || files.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "No files uploaded" 
+      });
     }
 
     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
+      return res.status(400).json({
+        success: false,
         message: "Invalid case IDs",
         receivedIds: req.body.caseIds,
         parsedIds: caseIds
       });
     }
 
-    // Verify actual file size if the reported size is 0
-    let actualSize = file.size;
-    if (file.size === 0) {
-      actualSize = await verifyS3UploadSize(file.key);
-      console.log("Verified actual size:", actualSize);
-      
-      if (actualSize === null) {
-        console.warn("Could not verify file size in S3, using reported size (0)");
-        actualSize = 0;
+    // 2. Process all files
+    const uploadedAttachments = [];
+    const errors = [];
+
+    for (const file of files) {
+      try {
+        // Verify file size and S3 upload if needed
+        let actualSize = file.size;
+        if (file.size === 0) {
+          const s3Size = await verifyS3KeyExists(file.key);
+          actualSize = s3Size || 0;
+
+          if (!s3Size) {
+            errors.push({
+              filename: file.originalname,
+              error: "File not found in S3 after upload"
+            });
+            continue;
+          }
+        } else {
+          const s3Verified = await verifyS3KeyExists(file.key);
+          if (!s3Verified) {
+            errors.push({
+              filename: file.originalname,
+              error: "Upload failed: File not present in S3"
+            });
+            continue;
+          }
+        }
+
+        // Prepare attachment metadata
+        const attachment = {
+          filename: file.originalname,
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: actualSize,
+          location: file.location,
+          key: file.key,
+          uploadedAt: getFormattedDateTime(),
+          etag: file.etag
+        };
+
+        // Save metadata to DB
+        const result = await KYC.updateMany(
+          { caseId: { $in: caseIds } },
+          { $push: { attachments: attachment } }
+        );
+
+        uploadedAttachments.push({
+          filename: file.originalname,
+          status: 'success',
+          modifiedCount: result.modifiedCount
+        });
+
+      } catch (fileError) {
+        console.error(`Error processing ${file.originalname}:`, fileError);
+        errors.push({
+          filename: file.originalname,
+          error: fileError.message
+        });
       }
     }
 
-    const attachment = {
-      filename: file.originalname,
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: actualSize, // Use verified size
-      location: file.location,
-      key: file.key,
-      uploadedAt: getFormattedDateTime(),
-      etag: file.etag
+    // 3. Prepare response
+    const response = {
+      success: errors.length === 0,
+      message: `Processed ${uploadedAttachments.length} file(s) successfully`,
+      uploaded: uploadedAttachments
     };
 
-    const result = await KYC.updateMany(
-      { caseId: { $in: caseIds } },
-      { $push: { attachments: attachment } }
-    );
+    if (errors.length > 0) {
+      response.errors = errors;
+      response.message += `, with ${errors.length} error(s)`;
+    }
 
-    res.status(201).json({ 
-      success: true, 
-      message: `File uploaded to ${result.modifiedCount} records`,
-      attachment: {
-        ...attachment,
-        size: actualSize // Ensure the response shows correct size
-      }
-    });
+    res.status(errors.length > 0 ? 207 : 201).json(response);
+
   } catch (error) {
     console.error("Upload error:", error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: "File upload failed",
-      error: error.message 
+      error: error.message
     });
   }
 };
+
+
 // exports.uploadAttachment = async (req, res) => {
 //   try {
-//     // For FormData, caseIds come as multiple fields with the same name
+//     // Parse caseIds (your existing code)
 //     let caseIds = Array.isArray(req.body.caseIds) 
 //       ? req.body.caseIds 
 //       : [req.body.caseIds].filter(Boolean);
 
-//     // If caseIds is still empty, try parsing from string
 //     if (caseIds.length === 0 && typeof req.body.caseIds === 'string') {
 //       try {
 //         caseIds = JSON.parse(req.body.caseIds);
@@ -3850,10 +4973,8 @@ exports.uploadAttachment = async (req, res) => {
 //       }
 //     }
 
-//     // console.log("Parsed caseIds:", caseIds);
-    
 //     const file = req.file;
-//     console.log("file:",file)
+//     console.log("Initial file info:", file);
 
 //     if (!file) {
 //       return res.status(400).json({ success: false, message: "No file uploaded" });
@@ -3868,15 +4989,27 @@ exports.uploadAttachment = async (req, res) => {
 //       });
 //     }
 
-//     // Rest of your existing code...
+//     // Verify actual file size if the reported size is 0
+//     let actualSize = file.size;
+//     if (file.size === 0) {
+//       actualSize = await verifyS3UploadSize(file.key);
+//       console.log("Verified actual size:", actualSize);
+      
+//       if (actualSize === null) {
+//         console.warn("Could not verify file size in S3, using reported size (0)");
+//         actualSize = 0;
+//       }
+//     }
+
 //     const attachment = {
-//       filename: file.filename || `${Date.now()}-${file.originalname}`,
+//       filename: file.originalname,
 //       originalname: file.originalname,
 //       mimetype: file.mimetype,
-//       size: file.size,
+//       size: actualSize, // Use verified size
 //       location: file.location,
 //       key: file.key,
-//       uploadedAt:getFormattedDateTime()
+//       uploadedAt: getFormattedDateTime(),
+//       etag: file.etag
 //     };
 
 //     const result = await KYC.updateMany(
@@ -3887,7 +5020,10 @@ exports.uploadAttachment = async (req, res) => {
 //     res.status(201).json({ 
 //       success: true, 
 //       message: `File uploaded to ${result.modifiedCount} records`,
-//       attachment
+//       attachment: {
+//         ...attachment,
+//         size: actualSize // Ensure the response shows correct size
+//       }
 //     });
 //   } catch (error) {
 //     console.error("Upload error:", error);
@@ -3897,48 +5033,7 @@ exports.uploadAttachment = async (req, res) => {
 //       error: error.message 
 //     });
 //   }
-//   // try {
-//   //   const { caseIds } = req.body; // Now accepts multiple case IDs
-//   //   const file = req.file;
-//   //   console.log("caseIds:",caseIds)
-//   //   console.log("file:",file)
-
-//   //   if (!file) {
-//   //     return res.status(400).json({ success: false, message: "No file uploaded" });
-//   //   }
-
-//   //   if (!caseIds || !Array.isArray(caseIds)) {
-//   //     return res.status(400).json({ success: false, message: "Invalid case IDs" });
-//   //   }
-
-//   //   const attachment = {
-//   //     filename: file.filename || `${Date.now()}-${file.originalname}`,
-//   //     originalname: file.originalname,
-//   //     mimetype: file.mimetype,
-//   //     size: file.size,
-//   //     location: file.location, // S3 URL
-//   //     key: file.key, // S3 key
-//   //     uploadedAt: new Date()
-//   //   };
-
-//   //   // Update all cases with this attachment
-//   //   const result = await KYC.updateMany(
-//   //     { caseId: { $in: caseIds } },
-//   //     { $push: { attachments: attachment } }
-//   //   );
-
-//   //   res.status(201).json({ 
-//   //     success: true, 
-//   //     message: `File uploaded to ${result.modifiedCount} records`,
-//   //     attachment
-//   //   });
-//   // } catch (error) {
-//   //   console.error("Upload error:", error);
-//   //   res.status(500).json({ success: false, message: "File upload failed" });
-//   // }
 // };
-// Updated downloadAttachment
-
 
 exports.downloadAttachment = async (req, res) => {
   try {
@@ -4171,28 +5266,220 @@ exports.deleteAttachment = async (req, res) => {
 
 
 // New endpoint for batch deduce
-exports.similarRecords = async (req, res) => {
-  const { userId } = req.body
-  console.log("userId:",req.body.userId)
-  try {
 
-    const user = await User.findOne({userId})
-    console.log("user:",user)
-    if (!user){
+exports.similarRecords = async (req, res) => {
+  try {
+    const { 
+      userId,
+      page = 1, 
+      pageSize = 50,
+      searchQuery = "",
+      // Filter parameters
+      product,
+      productType,
+      status,
+      caseStatus,
+      dateInStart,
+      dateInEnd,
+      dateOutStart,
+      dateOutEnd,
+      sentDate,
+      vendorStatus,
+      priority,
+      clientType,
+      ...filters
+    } = req.body;
+
+    const skip = (page - 1) * pageSize;
+
+    // Verify user exists
+    const user = await User.findOne({ userId });
+    if (!user) {
       return res.status(401).json({
-      success: false,
-      message: "user not found"
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Base query for duplicates
+    let query = { isDedup: true };
+    
+    // Role-specific filtering
+    if (user.role === "employee") {
+      query.listByEmployee = user.name;
+    }
+
+    // Search functionality
+    if (searchQuery) {
+  const regex = { $regex: searchQuery, $options: "i" };
+
+  query.$or = [
+    { caseId: regex },
+    { userId: regex },
+    { remarks: regex },
+    { name: regex },
+    { details: regex },
+    { details1: regex },
+    { priority: regex },
+    { correctUPN: regex },
+    { product: regex },
+    { updatedProductName: regex },
+    { accountNumber: regex },
+    { requirement: regex },
+    { updatedRequirement: regex },
+    { accountNumberDigit: regex },
+    { bankCode: regex },
+    { clientCode: regex },
+    { vendorName: regex },
+    { dateIn: regex },
+    { dateInDate: regex },
+    { status: regex },
+    { caseStatus: regex },
+    { productType: regex },
+    { listByEmployee: regex },
+    { dateOut: regex },
+    { dateOutInDay: regex },
+    { sentBy: regex },
+    { autoOrManual: regex },
+    { caseDoneBy: regex },
+    { clientTAT: regex },
+    { customerCare: regex },
+    { sentDate: regex },
+    { sentDateInDay: regex },
+    { clientType: regex },
+    { dedupBy: regex },
+    { vendorRate: regex },
+    { clientRate: regex },
+    { NameUploadBy: regex },
+    { ReferBy: regex },
+    { ipAddress: regex },
+    { vendorStatus: regex },
+    { year: regex },
+    { month: regex },
+    { role: regex },
+    { "attachments.filename": regex },
+    { "attachments.originalname": regex },
+    { "attachments.key": regex }
+  ];
+}
+
+    // Apply filters
+    if (product) query.product = product;
+    if (productType) query.productType = productType;
+    if (status) query.status = status;
+    if (caseStatus) query.caseStatus = caseStatus;
+    if (vendorStatus) query.vendorStatus = vendorStatus;
+    if (priority) query.priority = priority;
+    if (clientType) query.clientType = clientType;
+
+    // Date range filters
+    if (dateInStart || dateInEnd) {
+      if (dateInStart && dateInEnd) {
+        const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+        const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+        
+        if (startDate === endDate) {
+          query.dateIn = { $regex: `^${startDate}` };
+        } else {
+          query.$and = [
+            { 
+              dateIn: { 
+                $gte: `${startDate}, 00:00:00 AM`,
+                $lte: `${endDate}, 11:59:59 PM`
+              }
+            }
+          ];
+        }
+      } else if (dateInStart) {
+        const dateStr = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+        query.dateIn = { $regex: `^${dateStr}` };
+      } else if (dateInEnd) {
+        const dateStr = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+        query.dateIn = { $lte: `${dateStr}, 11:59:59 PM` };
+      }
+    }
+
+    // Date Out filter (same pattern as dateIn)
+    if (dateOutStart || dateOutEnd) {
+  // Initialize dateOut filter object
+  const dateOutFilter = {};
+  
+  // Format dates consistently
+  const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+  const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+
+  // Case 1: Both start and end dates provided
+  if (startDateStr && endDateStr) {
+    if (startDateStr === endDateStr) {
+      // Single day match - use regex for exact day
+      dateOutFilter.$regex = `^${startDateStr}`;
+    } else {
+      // Date range - use string comparison
+      dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
+      dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+    }
+  }
+  // Case 2: Only start date provided
+  else if (startDateStr) {
+    dateOutFilter.$regex = `^${startDateStr}`;
+  }
+  // Case 3: Only end date provided
+  else if (endDateStr) {
+    dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+  }
+
+  // Only apply the filter if we have valid conditions
+  if (Object.keys(dateOutFilter).length > 0) {
+    // Exclude empty dateOut values and apply the filter
+    query.dateOut = {
+      ...dateOutFilter,
+      $ne: "", // Exclude empty values
+      $exists: true // Ensure field exists
+    };
+
+    // For range queries, we need to ensure we don't match invalid date strings
+    if (dateOutFilter.$gte || dateOutFilter.$lte) {
+      query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
+    }
+  }
+}
+
+    if (sentDate) {
+      query.sentDate = {
+        $regex: `^${sentDate}`,
+        $options: 'i'
+      };
+    }
+
+    // Additional filters from spread
+    Object.entries(filters).forEach(([key, value]) => {
+      if (Array.isArray(value) && value.length > 0) {
+        query[key] = { $in: value };
+      }
     });
-    }
-    let records = "";
-    if(user.role === "employee"){
-      records = await KYC.find({isDedup: true,listByEmployee:user.name}).sort({ _id: -1 });
-    }else{
-      records = await KYC.find({isDedup: true}).sort({ _id: -1 });
-    }
-    
-    
-    // Group by product and accountNumber
+
+    // Get column order for this role
+    const config = await ColumnConfig.findOne({ role: user.role });
+    let columnOrder = config?.columnOrder || Object.keys(KYC.schema.paths)
+      .filter(field => !['_id', '__v', 'createdAt', 'userId', 'updatedAt'].includes(field));
+
+    // Build projection
+    const projection = {};
+    columnOrder.forEach(field => {
+      projection[field] = 1;
+    });
+    projection._id = 0;
+
+    // Find potential duplicates
+    const records = await KYC.find(query, projection)
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(parseInt(pageSize));
+
+    // Count total records
+    const totalCount = await KYC.countDocuments(query);
+
+    // Group by product and accountNumber to identify duplicates
     const grouped = {};
     records.forEach(record => {
       const key = `${record.updatedProductName}|${record.accountNumber}`;
@@ -4201,27 +5488,35 @@ exports.similarRecords = async (req, res) => {
       }
       grouped[key].push(record);
     });
-    
-    // Filter groups with duplicates and apply alternating colors
+
+    // Filter groups with duplicates and apply colors
     const duplicates = Object.values(grouped)
       .filter(group => group.length > 1)
       .map((group, groupIndex) => {
-        return group.map((record, recordIndex) => {
-          // Add color flag for frontend highlighting
-          return {
-            ...record._doc,
-            _dedupColor: (groupIndex + recordIndex) % 2 === 0 ? 'blue' : 'green'
-          };
-        });
+        return group.map((record, recordIndex) => ({
+          ...record._doc,
+          _dedupColor: (groupIndex + recordIndex) % 2 === 0 ? 'blue' : 'green'
+        }));
       });
-    
+
+    // Flatten the duplicates array
+    const flatDuplicates = duplicates.flat();
+
     res.json({
-      success: true,
-      duplicates: duplicates.flat(),
-      totalDuplicates: duplicates.flat().length,
-      totalGroups: duplicates.length
-    });
+  success: true,
+  data: flatDuplicates, // Changed from 'duplicates' to 'data'
+  pagination: {
+    total: totalCount,
+    page: parseInt(page),
+    pageSize: parseInt(pageSize),
+    totalPages: Math.ceil(totalCount / pageSize),
+    totalDuplicates: flatDuplicates.length,
+    totalGroups: duplicates.length
+  }
+});
+
   } catch (error) {
+    console.error("Error finding similar records:", error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -4229,7 +5524,268 @@ exports.similarRecords = async (req, res) => {
   }
 };
 
+// exports.similarRecords = async (req, res) => {
+//   try {
+//     const { 
+//       userId,
+//       role,
+//       name,
+//       page = 1, 
+//       pageSize = 50,
+//       searchQuery = "",
+//       // Filter parameters
+//       product,
+//       productType,
+//       status,
+//       caseStatus,
+//       dateInStart,
+//       dateInEnd,
+//       dateOutStart,
+//       dateOutEnd,
+//       sentDate,
+//       vendorStatus,
+//       priority,
+//       clientType,
+//       ...filters
+//     } = req.query;
 
+//     const skip = (page - 1) * pageSize;
+
+//     // Get column order for this role
+//     const config = await ColumnConfig.findOne({ role });
+//     let columnOrder = config?.columnOrder;
+    
+//     if (!columnOrder) {
+//       // Fallback to all fields if no config exists
+//       columnOrder = Object.keys(KYC.schema.paths).filter(
+//         field => !['_id', '__v', 'createdAt','userId', 'updatedAt'].includes(field)
+//       );
+//     }
+    
+//     // Build projection based on column order
+//     const projection = {};
+//     columnOrder.forEach(field => {
+//       projection[field] = 1;
+//     });
+//     projection._id = 0;
+
+//     let query = { isDedup: true };
+
+//     // Verify user exists
+//     const user = await User.findOne({ userId });
+//     if (!user) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "User not found"
+//       });
+//     }
+
+//     // Role-based filtering
+//     if (role === "employee") {
+//       query.listByEmployee = user.name;
+//     }
+
+//     // Search functionality
+//     if (searchQuery) {
+//       const regex = { $regex: searchQuery, $options: "i" };
+
+//       query.$or = [
+//         { caseId: regex },
+//         { userId: regex },
+//         { remarks: regex },
+//         { name: regex },
+//         { details: regex },
+//         { details1: regex },
+//         { priority: regex },
+//         { correctUPN: regex },
+//         { product: regex },
+//         { updatedProductName: regex },
+//         { accountNumber: regex },
+//         { requirement: regex },
+//         { updatedRequirement: regex },
+//         { accountNumberDigit: regex },
+//         { bankCode: regex },
+//         { clientCode: regex },
+//         { vendorName: regex },
+//         { dateIn: regex },
+//         { dateInDate: regex },
+//         { status: regex },
+//         { caseStatus: regex },
+//         { productType: regex },
+//         { listByEmployee: regex },
+//         { dateOut: regex },
+//         { dateOutInDay: regex },
+//         { sentBy: regex },
+//         { autoOrManual: regex },
+//         { caseDoneBy: regex },
+//         { clientTAT: regex },
+//         { customerCare: regex },
+//         { sentDate: regex },
+//         { sentDateInDay: regex },
+//         { clientType: regex },
+//         { dedupBy: regex },
+//         { vendorRate: regex },
+//         { clientRate: regex },
+//         { NameUploadBy: regex },
+//         { ReferBy: regex },
+//         { ipAddress: regex },
+//         { vendorStatus: regex },
+//         { year: regex },
+//         { month: regex },
+//         { role: regex },
+//         { "attachments.filename": regex },
+//         { "attachments.originalname": regex },
+//         { "attachments.key": regex }
+//       ];
+//     }
+
+//     // Apply filters
+//     if (product) query.product = product;
+//     if (productType) query.productType = productType;
+//     if (status) query.status = status;
+//     if (caseStatus) query.caseStatus = caseStatus;
+//     if (vendorStatus) query.vendorStatus = vendorStatus;
+//     if (priority) query.priority = priority;
+//     if (clientType) query.clientType = clientType;
+
+//     // Date In range filter
+//     if (dateInStart || dateInEnd) {
+//       if (dateInStart && dateInEnd) {
+//         // RANGE QUERY - handle as string comparison
+//         const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+//         const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+        
+//         if (startDate === endDate) {
+//           // Single day
+//           query.dateIn = { $regex: `^${startDate}` };
+//         } else {
+//           // Date range - compare as strings
+//           query.$and = [
+//             { 
+//               dateIn: { 
+//                 $gte: `${startDate}, 00:00:00 AM`,
+//                 $lte: `${endDate}, 11:59:59 PM`
+//               }
+//             }
+//           ];
+//         }
+//       }
+//       else if (dateInStart) {
+//         // Single start date
+//         const dateStr = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+//         query.dateIn = { $regex: `^${dateStr}` };
+//       }
+//       else if (dateInEnd) {
+//         // Single end date
+//         const dateStr = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+//         query.dateIn = { $lte: `${dateStr}, 11:59:59 PM` };
+//       }
+//     }
+
+//     // Date Out range filter
+//     if (dateOutStart || dateOutEnd) {
+//       const dateOutFilter = {};
+      
+//       const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+//       const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+
+//       if (startDateStr && endDateStr) {
+//         if (startDateStr === endDateStr) {
+//           dateOutFilter.$regex = `^${startDateStr}`;
+//         } else {
+//           dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
+//           dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+//         }
+//       }
+//       else if (startDateStr) {
+//         dateOutFilter.$regex = `^${startDateStr}`;
+//       }
+//       else if (endDateStr) {
+//         dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+//       }
+
+//       if (Object.keys(dateOutFilter).length > 0) {
+//         query.dateOut = {
+//           ...dateOutFilter,
+//           $ne: "",
+//           $exists: true
+//         };
+
+//         if (dateOutFilter.$gte || dateOutFilter.$lte) {
+//           query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
+//         }
+//       }
+//     }
+
+//     // Additional filters
+//     Object.entries(filters).forEach(([key, value]) => {
+//       if (Array.isArray(value) && value.length > 0) {
+//         query[key] = { $in: value };
+//       }
+//     });
+
+//     if (sentDate) {
+//       query.sentDate = {
+//         $regex: `^${sentDate}`,
+//         $options: 'i'
+//       };
+//     }
+
+//     // Fetch records with pagination
+//     const [records, totalCount] = await Promise.all([
+//       KYC.find(query, projection)
+//         .sort({ _id: -1 })
+//         .skip(skip)
+//         .limit(parseInt(pageSize)),
+//       KYC.countDocuments(query)
+//     ]);
+
+//     // Group by product and accountNumber to find duplicates
+//     const grouped = {};
+//     records.forEach(record => {
+//       const key = `${record.updatedProductName}|${record.accountNumber}`;
+//       if (!grouped[key]) {
+//         grouped[key] = [];
+//       }
+//       grouped[key].push(record);
+//     });
+    
+//     // Filter groups with duplicates and apply alternating colors
+//     const duplicates = Object.values(grouped)
+//       .filter(group => group.length > 1)
+//       .map((group, groupIndex) => {
+//         return group.map((record, recordIndex) => {
+//           // Add color flag for frontend highlighting
+//           return {
+//             ...record._doc,
+//             _dedupColor: (groupIndex + recordIndex) % 2 === 0 ? 'blue' : 'green'
+//           };
+//         });
+//       });
+
+//     const orderedData = duplicates.flat().map(doc => orderFields(doc, columnOrder));
+
+//     res.json({
+//       success: true,
+//       data: orderedData,
+//       duplicates: orderedData,
+//       totalDuplicates: orderedData.length,
+//       totalGroups: duplicates.length,
+//       pagination: {
+//         total: totalCount,
+//         page: parseInt(page),
+//         pageSize: parseInt(pageSize),
+//         totalPages: Math.ceil(totalCount / pageSize)
+//       }
+//     });
+//   } catch (error) {
+//     console.error("Error in similarRecords:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+//   }
+// };
 exports.copyPasteDedup = async (req, res) => {
   try {
     const { sourceRecordToCopy, targetIds, userId, userName } = req.body;

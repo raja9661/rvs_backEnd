@@ -6,6 +6,6 @@ const {
 } = require('../controllers/kyc')
 
 const upload = require("../config/multer")
-router.post("/upload-attachment", upload.single("file"), uploadAttachment);
+router.post("/upload-attachment", upload.array("files"), uploadAttachment);
 
 module.exports = router;
