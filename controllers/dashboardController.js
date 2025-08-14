@@ -406,7 +406,7 @@ exports.getCaseDetails = async (req, res) => {
     { header: 'Priority', key: 'priority' },
     { header: 'Correct UPN', key: 'correctUPN' },
     { header: 'Product', key: 'product' },
-    { header: 'Updated Product Name', key: 'updatedProductName' }, 
+    { header: 'Updated Product Name', key: 'updatedProductName' }, // Note: original list had typo
     { header: 'Account Number', key: 'accountNumber' },
     { header: 'Requirement', key: 'requirement' },
     { header: 'Updated Requirement', key: 'updatedRequirement' },
