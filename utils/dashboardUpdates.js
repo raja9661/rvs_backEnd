@@ -308,80 +308,6 @@ const getFormattedDateTime = () => {
   return moment().tz("Asia/Kolkata").format("DD-MM-YYYY, hh:mm:ss A");
 };
 
-// async function getVerificationTrendsData(query = {}, role, user, clientCode) {
-//   const days = 7;
-//   const date = new Date();
-//   date.setDate(date.getDate() - days);
-
-//   // Strict validation for non-admin roles
-//   if (role === 'employee' && (!user || query.listByEmployee !== user)) {
-//     console.error(`Security violation: Employee ${user} attempted invalid query`);
-//     return generateEmptyTrendsData(days);
-//   }
-//   else if (role === 'client' && (!clientCode || query.clientCode !== clientCode)) {
-//     console.error(`Security violation: Client ${clientCode} attempted invalid query`);
-//     return generateEmptyTrendsData(days);
-//   }
-
-//   const trends = await KYC.aggregate([
-//     { 
-//       $match: { 
-//         ...query,
-//         createdAt: { $gte: date }
-//       } 
-//     },
-//     {
-//       $group: {
-//         _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-//         completed: {
-//           $sum: {
-//             $cond: [{ $eq: ["$status", "Closed"] }, 1, 0]
-//           }
-//         },
-//         pending: {
-//           $sum: {
-//             $cond: [
-//               { $and: [
-//                 { $eq: ["$dateOut", ""] },
-//                 { $ne: ["$caseStatus", "Sent"] }
-//               ]}, 
-//               1, 
-//               0
-//             ]
-//           }
-//         },
-//         sent: {
-//           $sum: {
-//             $cond: [{ $eq: ["$caseStatus", "Sent"] }, 1, 0]
-//           }
-//         },
-//         total: { $sum: 1 }
-//       }
-//     },
-//     { $sort: { "_id": 1 } }
-//   ]);
-
-//   // Ensure today is included
-//   const todayStr = new Date().toISOString().split('T')[0];
-//   if (!trends.some(t => t._id === todayStr)) {
-//     trends.push({
-//       _id: todayStr,
-//       completed: 0,
-//       pending: 0,
-//       sent: 0,
-//       total: 0
-//     });
-//   }
-
-//   return trends.map(t => ({
-//     date: t._id,
-//     completed: t.completed,
-//     pending: t.pending,
-//     sent: t.sent,
-//     total: t.total
-//   }));
-// }
-
 async function getVerificationTrendsData(query = {}, role, user, clientCode) {
   const days = 7;
   const date = new Date();
@@ -480,7 +406,7 @@ async function getRecentActivity(query = {}, limit = 20, role, user, clientCode)
     return [];
   }
 
-  return await KYC.find({
+  const data = await KYC.find({
     ...query,
     $or: [
       { caseStatus: "New Pending" },
@@ -490,8 +416,11 @@ async function getRecentActivity(query = {}, limit = 20, role, user, clientCode)
   })
     .sort({ updatedAt: -1 })
     .limit(limit)
-    .select("caseId name caseStatus status priority updatedAt clientType clientCode product listByEmployee")
+    .select("caseId name caseStatus status priority updatedAt clientType clientCode updatedProductName listByEmployee")
     .lean();
+    // console.log("data:",data)
+
+  return data
 }
 
 async function fetchDashboardStats(query, useCache = true, role, user, clientCode) {
@@ -504,37 +433,58 @@ async function fetchDashboardStats(query, useCache = true, role, user, clientCod
     }
   }
 
-  // Strict validation
-  if (role === 'employee' && (!user || query.listByEmployee !== user)) {
-    console.error(`Security violation: Employee ${user} attempted invalid query`);
-    return getEmptyStats();
-  }
-  else if (role === 'client' && (!clientCode || query.clientCode !== clientCode)) {
-    console.error(`Security violation: Client ${clientCode} attempted invalid query`);
-    return getEmptyStats();
-  }
-
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
+  const currentMonthStart = new Date();
+  currentMonthStart.setDate(1);
+  currentMonthStart.setHours(0, 0, 0, 0);
+
   const [
     totalCases,
+    monthlyCases,
+    totalSentPending,
+    totalNewPending,
+    totalHighPriority,
+    totalClosed,
     todayCases,
-    pendingCases,
-    highPriorityCases,
-    closedCases,
-    completionRateAgg
+    todaySentPending,
+    todayNewPending,
+    todayHighPriority,
+    todayClosed,
+    completionRateAgg,
+    todayCompletionRateAgg
   ] = await Promise.all([
     KYC.countDocuments(query),
-    KYC.countDocuments({ ...query, createdAt: { $gte: todayStart, $lte: todayEnd } }),
+    KYC.countDocuments({ ...query, createdAt: { $gte: currentMonthStart } }),
     KYC.countDocuments({ ...query, caseStatus: "New Pending" }),
+    KYC.countDocuments({ ...query, status: "Pending" }),
     KYC.countDocuments({ ...query, priority: "Urgent" }),
     KYC.countDocuments({ ...query, status: "Closed" }),
+    KYC.countDocuments({ ...query, createdAt: { $gte: todayStart, $lte: todayEnd } }),
+    KYC.countDocuments({ ...query, caseStatus: "New Pending", createdAt: { $gte: todayStart, $lte: todayEnd } }),
+    KYC.countDocuments({ ...query, status: "Pending", createdAt: { $gte: todayStart, $lte: todayEnd } }),
+    KYC.countDocuments({ ...query, priority: "Urgent", createdAt: { $gte: todayStart, $lte: todayEnd } }),
+    KYC.countDocuments({ ...query, status: "Closed", createdAt: { $gte: todayStart, $lte: todayEnd } }),
     KYC.aggregate([
       { $match: query },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          completed: { $sum: { $cond: [{ $eq: ["$status", "Closed"] }, 1, 0] } }
+      }}
+    ]),
+    KYC.aggregate([
+      { 
+        $match: { 
+          ...query,
+          createdAt: { $gte: todayStart, $lte: todayEnd }
+        } 
+      },
       {
         $group: {
           _id: null,
@@ -544,23 +494,106 @@ async function fetchDashboardStats(query, useCache = true, role, user, clientCod
     ])
   ]);
 
-  const completionRate = completionRateAgg[0]?.total > 0 
+  const totalCompletionRate = completionRateAgg[0]?.total > 0 
     ? Math.round((completionRateAgg[0]?.completed / completionRateAgg[0]?.total) * 100)
     : 0;
 
+  const todayCompletionRate = todayCompletionRateAgg[0]?.total > 0
+    ? Math.round((todayCompletionRateAgg[0]?.completed / todayCompletionRateAgg[0]?.total) * 100)
+    : 0;
+
   const stats = {
+    // Total section
     totalCases,
+    monthlyCases,
+    totalSentPending,
+    totalNewPending,
+    totalHighPriority,
+    totalClosed,
+    totalCompletionRate,
+    
+    // Today section
     todayCases,
-    pendingCases,
-    highPriorityCases,
-    closedCases,
-    completionRate,
+    todaySentPending,
+    todayNewPending,
+    todayHighPriority,
+    todayClosed,
+    todayCompletionRate,
+    
     updatedAt: new Date()
   };
 
   roleBasedCache.set(cacheKey, { stats, timestamp: Date.now() });
   return stats;
 }
+
+// async function fetchDashboardStats(query, useCache = true, role, user, clientCode) {
+//   const cacheKey = `${role}:${user || clientCode || 'admin'}`;
+  
+//   if (useCache && roleBasedCache.has(cacheKey)) {
+//     const { stats, timestamp } = roleBasedCache.get(cacheKey);
+//     if (Date.now() - timestamp < CACHE_TTL) {
+//       return { ...stats, cached: true };
+//     }
+//   }
+
+//   // Strict validation
+//   if (role === 'employee' && (!user || query.listByEmployee !== user)) {
+//     console.error(`Security violation: Employee ${user} attempted invalid query`);
+//     return getEmptyStats();
+//   }
+//   else if (role === 'client' && (!clientCode || query.clientCode !== clientCode)) {
+//     console.error(`Security violation: Client ${clientCode} attempted invalid query`);
+//     return getEmptyStats();
+//   }
+
+//   const todayStart = new Date();
+//   todayStart.setHours(0, 0, 0, 0);
+  
+//   const todayEnd = new Date();
+//   todayEnd.setHours(23, 59, 59, 999);
+
+//   const [
+//     totalCases,
+//     todayCases,
+//     pendingCases,
+//     highPriorityCases,
+//     closedCases,
+//     completionRateAgg
+//   ] = await Promise.all([
+//     KYC.countDocuments(query),
+//     KYC.countDocuments({ ...query, createdAt: { $gte: todayStart, $lte: todayEnd } }),
+//     KYC.countDocuments({ ...query, caseStatus: "New Pending" }),
+//     KYC.countDocuments({ ...query, priority: "Urgent" }),
+//     KYC.countDocuments({ ...query, status: "Closed" }),
+//     KYC.aggregate([
+//       { $match: query },
+//       {
+//         $group: {
+//           _id: null,
+//           total: { $sum: 1 },
+//           completed: { $sum: { $cond: [{ $eq: ["$status", "Closed"] }, 1, 0] } }
+//       }}
+//     ])
+//   ]);
+
+//   const completionRate = completionRateAgg[0]?.total > 0 
+//     ? Math.round((completionRateAgg[0]?.completed / completionRateAgg[0]?.total) * 100)
+//     : 0;
+
+//   const stats = {
+//     totalCases,
+//     todayCases,
+//     pendingCases,
+//     highPriorityCases,
+//     closedCases,
+//     completionRate,
+//     updatedAt: new Date()
+//   };
+
+//   roleBasedCache.set(cacheKey, { stats, timestamp: Date.now() });
+//   return stats;
+// }
 
 function getEmptyStats() {
   return {

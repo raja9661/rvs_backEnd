@@ -61,5 +61,13 @@ const trackerSchema = new mongoose.Schema({
       }],
 }, { timestamps: true });
 
+trackerSchema.index({ year: 1 });
+trackerSchema.index({ month: 1 });
+trackerSchema.index({ clientCode: 1 });
+trackerSchema.index({ updatedProductName: 1 });
+trackerSchema.index({ listByEmployee: 1 });
+trackerSchema.index({ createdAt: 1 });
+trackerSchema.index({ year: 1, month: 1, clientCode: 1 });
+
 
 module.exports = mongoose.model("KYCdoc", trackerSchema);

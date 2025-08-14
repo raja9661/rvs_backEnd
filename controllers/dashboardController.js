@@ -8,6 +8,8 @@ const {
   sendDashboardUpdates
 } = require('../utils/dashboardUpdates');
 const { ClientCode } = require('../models/MappingItems');
+const ExcelJS = require('exceljs');
+
 
 // Consolidated dashboard data endpoint with client role support
 exports.getDashboardData = async (req, res) => {
@@ -85,7 +87,7 @@ exports.getDashboardData = async (req, res) => {
 
 exports.getCaseDetails = async (req, res) => {
   try {
-    const { type, year, month, clientType, clientCode, updatedProductName, download } = req.query;
+    const { type, year, month, clientType, clientCode, updatedProductName, vendorName, today, download } = req.query;
     const { role, user, code } = req.body.requestBody;
     const userClientCode = code;
     
@@ -105,61 +107,145 @@ exports.getCaseDetails = async (req, res) => {
     }
 
     // Handle today cases
-    if (type === 'today') {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      query.createdAt = { $gte: startOfDay };
-    } 
-    // Case type filters
-    else if (type === 'New Pending') query.caseStatus = 'New Pending';
-    else if (type === 'closed') query.status = 'Closed';
-    else if (type === 'highPriority') query.priority = 'Urgent';
+    if (today) {
+      const todayDate = new Date(today);
+      todayDate.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(todayDate);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      query.createdAt = { $gte: todayDate, $lt: tomorrow };
+    }
     
-    // Date filters (excluding today cases)
-    if (type !== 'today') {
+    // Apply type-specific filters
+    switch(type) {
+      case 'totalPending':
+        query.status = 'Pending';
+        break;
+      case 'totalNewPending':
+        query.caseStatus = 'New Pending';
+        break;
+      case 'totalHighPriority':
+        query.priority = 'Urgent';
+        break;
+      case 'totalClosed':
+        query.status = 'Closed';
+        break;
+      case 'todayNewPending':
+        query.caseStatus = 'New Pending';
+        break;
+      case 'todayPending':
+        query.status = 'Pending';
+        break;
+      case 'todayClosed':
+        query.status = 'Closed';
+        break;
+      case 'todayHighPriority':
+        query.priority = 'Urgent';
+        break;
+    }
+    
+    // For monthly cases, filter current month
+    if (type === 'monthly') {
+      const currentDate = new Date();
+      query.year = currentDate.getFullYear().toString();
+      query.month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
+    } else if (!today) {
+      // For non-today cases, apply year/month filters
       if (year) query.year = year;
       if (month) query.month = month;
     }
     
-    // Hierarchy filters
+    // Apply hierarchy filters
     if (clientType) query.clientType = clientType;
-    if (clientCode) {
-      if (role === 'client' && clientCode !== userClientCode) {
-        return res.status(403).json({
-          success: false,
-          message: "Access to other client data denied"
-        });
-      }
-      query.clientCode = clientCode;
-    }
+    if (clientCode) query.clientCode = clientCode;
     if (updatedProductName) query.updatedProductName = updatedProductName;
+    if (vendorName) query.vendorName = vendorName;
 
-    // Determine hierarchy level
-    const hierarchyLevel = updatedProductName ? 'productDetails' : 
-      clientCode ? 'updatedProductName' : 
-      clientType ? 'clientCode' : 
-      type === 'today' || month ? 'clientType' : 
-      year ? 'month' : 'year';
+    // Determine grouping field based on type and hierarchy level
+    let groupByField;
+    switch(type) {
+      // case 'todayNewPending':
+      //   groupByField = vendorName ? '$updatedProductName' : '$vendorName';
+      //   break;
+      // case 'todayPending':
+      //   groupByField = clientCode ? '$updatedProductName' : '$clientCode';
+      //   break;
+      case 'todayNewPending':
+    groupByField = updatedProductName ? null : 
+                  vendorName ? '$updatedProductName' : 
+                  '$vendorName';
+    break;
+  case 'todayPending':
+    groupByField = updatedProductName ? null : 
+                  clientCode ? '$updatedProductName' : 
+                  '$clientCode';
+    break;
+      case 'todayClosed':
+      case 'todayHighPriority':
+        groupByField = updatedProductName ? null : 
+                      clientCode ? '$updatedProductName' : 
+                      clientType ? '$clientCode' : 
+                      '$clientType';
+        break;
+      case 'monthly':
+      case 'today':
+        groupByField = updatedProductName ? null : 
+                      clientCode ? '$updatedProductName' : 
+                      clientType ? '$clientCode' : 
+                      '$clientType';
+        break;
+      default: // total cases and other totals
+        groupByField = updatedProductName ? null : 
+                      clientCode ? '$updatedProductName' : 
+                      clientType ? '$clientCode' : 
+                      month ? '$clientType' :
+                      year ? '$month' :
+                      '$year';
+    }
 
-    // For non-download requests, use aggregation for counts only
+    // For non-download requests, use aggregation for counts
     if (!download) {
-      let groupByField;
-      switch (hierarchyLevel) {
-        case 'updatedProductName': groupByField = '$updatedProductName'; break;
-        case 'clientCode': groupByField = '$clientCode'; break;
-        case 'clientType': groupByField = '$clientType'; break;
-        case 'month': groupByField = '$month'; break;
-        case 'year': groupByField = '$year'; break;
-      }
-
-      if (hierarchyLevel === 'productDetails') {
-        // For product details, we need the full records but with pagination
+      if (!groupByField) {
+        // For product details level, return the actual records
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 50;
         const skip = (page - 1) * limit;
 
+        // Select only necessary fields for client role
+        let projection = {};
+        if (role === 'client') {
+          projection = {
+            caseId: 1,
+            attachments: 1,
+            remarks: 1,
+            name: 1,
+            details: 1,
+            details1: 1,
+            priority: 1,
+            correctUPN: 1,
+            product: 1,
+            updatedProductName: 1,
+            accountNumber: 1,
+            requirement: 1,
+            updatedRequirement: 1,
+            clientCode: 1,
+            dateIn: 1,
+            status: 1,
+            dateInDate: 1,
+            caseStatus: 1,
+            productType: 1,
+            listByEmployee: 1,
+            dateOut: 1,
+            sentBy: 1,
+            caseDoneBy: 1,
+            customerCare: 1,
+            NameUploadBy: 1,
+            sentDate: 1,
+            isRechecked: 1
+          };
+        }
+
         const [records, total] = await Promise.all([
-          KYC.find(query).skip(skip).limit(limit).lean(),
+          KYC.find(query, projection).skip(skip).limit(limit).lean(),
           KYC.countDocuments(query)
         ]);
 
@@ -169,10 +255,10 @@ exports.getCaseDetails = async (req, res) => {
           total,
           page,
           pages: Math.ceil(total / limit),
-          hierarchyLevel
+          hierarchyLevel: 'productDetails'
         });
       } else {
-        // Use MongoDB aggregation for counting
+        // Use aggregation for counting grouped data
         const aggregationPipeline = [
           { $match: query },
           { $group: { 
@@ -183,104 +269,222 @@ exports.getCaseDetails = async (req, res) => {
             name: '$_id',
             count: 1,
             _id: 0
-          }}
+          }},
+          { $sort: { name: 1 } }
         ];
 
+        // For vendorName grouping, include vendor details
+        if (groupByField === '$vendorName') {
+          aggregationPipeline.unshift({
+            $lookup: {
+              from: 'vendors',
+              localField: 'vendorName',
+              foreignField: 'name',
+              as: 'vendorDetails'
+            }
+          });
+          aggregationPipeline.push({
+            $addFields: {
+              vendorCode: { $arrayElemAt: ['$vendorDetails.code', 0] }
+            }
+          });
+        }
+
         const data = await KYC.aggregate(aggregationPipeline);
+        
         return res.json({ 
           success: true,
           data,
-          hierarchyLevel
+          hierarchyLevel: groupByField === '$vendorName' ? 'vendorName' : 
+                         groupByField === '$updatedProductName' ? 'updatedProductName' :
+                         groupByField === '$clientCode' ? 'clientCode' :
+                         groupByField === '$clientType' ? 'clientType' :
+                         groupByField === '$month' ? 'month' : 'year'
         });
       }
     }
 
     // Handle Excel download - stream data directly without loading all into memory
-    // Handle Excel download - stream data directly without loading all into memory
-if (download) {
-  const allowedColumns = {
-    admin: null,
-    employee: null,
-    client: [
-      'caseId',
-      'attachments',
-      'remarks',
-      'name',
-      'details',
-      'details1',
-      'priority',
-      'correctUPN',
-      'product',
-      'updatedProductName',
-      'accountNumber',
-      'requirement',
-      'updatedRequirement',
-      'clientCode',
-      'dateIn',
-      'status',
-      'dateInDate',
-      'caseStatus',
-      'productType',
-      'listByEmployee',
-      'dateOut',
-      'sentBy',
-      'caseDoneBy',
-      'customerCare',
-      'NameUploadBy',
-      'sentDate',
-      'isRechecked'
-    ]
-  };
+    if (download) {
+      res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
-  // Create a cursor for streaming with lean() to get plain objects
-  const cursor = KYC.find(query).lean().cursor();
-  
-  // Create workbook and worksheet
-  const workbook = XLSX.utils.book_new();
-  const worksheet = XLSX.utils.json_to_sheet([]);
-  XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
+      // Create streaming workbook
+      const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res });
+      const sheet = workbook.addWorksheet('CaseDetails');
 
-  // Stream data in chunks
-  let firstChunk = true;
-  let headers = [];
-  
-  for await (const doc of cursor) {
-    let record = doc;
+      // Define columns based on role
+      const columns = {
+        admin: [
     
-    if (role === 'client' && allowedColumns.client) {
-      record = {};
-      allowedColumns.client.forEach(col => {
-        if (doc[col] !== undefined) {
-          record[col] = doc[col];
+    { header: 'Case ID', key: 'caseId' },
+    { header: 'Attachments', key: 'attachments' },
+    { header: 'Remarks', key: 'remarks' },
+    { header: 'Name', key: 'name' },
+    { header: 'Details', key: 'details' },
+    { header: 'Details 1', key: 'details1' },
+    { header: 'Priority', key: 'priority' },
+    { header: 'Correct UPN', key: 'correctUPN' },
+    { header: 'Product', key: 'product' },
+    { header: 'Updated Product Name', key: 'updatedProductName' },
+    { header: 'Account Number', key: 'accountNumber' },
+    { header: 'Requirement', key: 'requirement' },
+    { header: 'Updated Requirement', key: 'updatedRequirement' },
+    { header: 'Account Number Digit', key: 'accountNumberDigit' },
+    { header: 'Bank Code', key: 'bankCode' },
+    { header: 'Client Code', key: 'clientCode' },
+    { header: 'Vendor Name', key: 'vendorName' },
+    { header: 'Vendor Status', key: 'vendorStatus' },
+    { header: 'Date In', key: 'dateIn' },
+    { header: 'Date In Day', key: 'dateInDate' },
+    { header: 'Status', key: 'status' },
+    { header: 'Case Status', key: 'caseStatus' },
+    { header: 'Product Type', key: 'productType' },
+    { header: 'List By Employee', key: 'listByEmployee' },
+    { header: 'Date Out', key: 'dateOut' },
+    { header: 'Date Out Day', key: 'dateOutInDay' },
+    { header: 'Sent By', key: 'sentBy' },
+    { header: 'Auto Or Manual', key: 'autoOrManual' },
+    { header: 'Case Done By', key: 'caseDoneBy' },
+    { header: 'Client TAT', key: 'clientTAT' },
+    { header: 'Customer Care', key: 'customerCare' },
+    { header: 'Name Upload By', key: 'NameUploadBy' },
+    { header: 'Sent Date', key: 'sentDate' },
+    { header: 'Sent Date Day', key: 'sentDateInDay' },
+    { header: 'Client Type', key: 'clientType' },
+    { header: 'Dedup By', key: 'dedupBy' },
+    { header: 'IP Address', key: 'ipAddress' },
+    { header: 'Is Rechecked', key: 'isRechecked' },
+    
+  ],
+  employee: [
+    { header: 'Case ID', key: 'caseId' },
+    { header: 'Attachments', key: 'attachments' },
+    { header: 'Remarks', key: 'remarks' },
+    { header: 'Name', key: 'name' },
+    { header: 'Details', key: 'details' },
+    { header: 'Details 1', key: 'details1' },
+    { header: 'Priority', key: 'priority' },
+    { header: 'Correct UPN', key: 'correctUPN' },
+    { header: 'Product', key: 'product' },
+    { header: 'Updated Product Name', key: 'updatedProductName' },
+    { header: 'Account Number', key: 'accountNumber' },
+    { header: 'Requirement', key: 'requirement' },
+    { header: 'Updated Requirement', key: 'updatedRequirement' },
+    { header: 'Account Number Digit', key: 'accountNumberDigit' },
+    { header: 'Bank Code', key: 'bankCode' },
+    { header: 'Client Code', key: 'clientCode' },
+    { header: 'Vendor Name', key: 'vendorName' },
+    { header: 'Date In', key: 'dateIn' },
+    { header: 'Date In Day', key: 'dateInDate' },
+    { header: 'Case Status', key: 'caseStatus' },
+    { header: 'Product Type', key: 'productType' },
+    { header: 'List By Employee', key: 'listByEmployee' },
+    { header: 'Date Out', key: 'dateOut' },
+    { header: 'Date Out Day', key: 'dateOutInDay' },
+    { header: 'Sent By', key: 'sentBy' },
+    { header: 'Auto Or Manual', key: 'autoOrManual' },
+    { header: 'Case Done By', key: 'caseDoneBy' },
+    { header: 'Client TAT', key: 'clientTAT' },
+    { header: 'Customer Care', key: 'customerCare' },
+    { header: 'Sent Date', key: 'sentDate' },
+    { header: 'Sent Date Day', key: 'sentDateInDay' },
+    { header: 'Client Type', key: 'clientType' },
+    { header: 'Dedup By', key: 'dedupBy' },
+    { header: 'IP Address', key: 'ipAddress' },
+    { header: 'Is Rechecked', key: 'isRechecked' },
+    { header: 'Created At', key: 'createdAt' },
+    { header: 'Updated At', key: 'updatedAt' }
+  ],
+  client: [
+    { header: 'Case ID', key: 'caseId' },
+    { header: 'Attachments', key: 'attachments' },
+    { header: 'Remarks', key: 'remarks' },
+    { header: 'Name', key: 'name' },
+    { header: 'Details', key: 'details' },
+    { header: 'Details 1', key: 'details1' },
+    { header: 'Priority', key: 'priority' },
+    { header: 'Correct UPN', key: 'correctUPN' },
+    { header: 'Product', key: 'product' },
+    { header: 'Updated Product Name', key: 'updatedProductName' }, // Note: original list had typo
+    { header: 'Account Number', key: 'accountNumber' },
+    { header: 'Requirement', key: 'requirement' },
+    { header: 'Updated Requirement', key: 'updatedRequirement' },
+    { header: 'Client Code', key: 'clientCode' },
+    { header: 'Date In', key: 'dateIn' },
+    { header: 'Date In Day', key: 'dateInDate' },
+    { header: 'Case Status', key: 'caseStatus' },
+    { header: 'Product Type', key: 'productType' },
+    { header: 'List By Employee', key: 'listByEmployee' },
+    { header: 'Date Out', key: 'dateOut' },
+    { header: 'Date Out Day', key: 'dateOutInDay' },
+    { header: 'Sent By', key: 'sentBy' },
+    { header: 'Case Done By', key: 'caseDoneBy' },
+    { header: 'Customer Care', key: 'customerCare' },
+    { header: 'IP Address', key: 'ipAddress' },
+    { header: 'Is Rechecked', key: 'isRechecked' },
+  
+  ]
+        // admin: [
+        //   { header: 'Case ID', key: 'caseId' },
+        //   { header: 'Client Type', key: 'clientType' },
+        //   { header: 'Client Code', key: 'clientCode' },
+        //   { header: 'Vendor Name', key: 'vendorName' },
+        //   { header: 'Product', key: 'product' },
+        //   { header: 'Updated Product Name', key: 'updatedProductName' },
+        //   { header: 'Account Number', key: 'accountNumber' },
+        //   { header: 'Status', key: 'status' },
+        //   { header: 'Case Status', key: 'caseStatus' },
+        //   { header: 'Priority', key: 'priority' },
+        //   { header: 'Created At', key: 'createdAt' },
+        //   { header: 'Updated At', key: 'updatedAt' }
+        // ],
+        // employee: [
+        //   { header: 'Case ID', key: 'caseId' },
+        //   { header: 'Client Code', key: 'clientCode' },
+        //   { header: 'Product', key: 'product' },
+        //   { header: 'Updated Product Name', key: 'updatedProductName' },
+        //   { header: 'Status', key: 'status' },
+        //   { header: 'Case Status', key: 'caseStatus' },
+        //   { header: 'Priority', key: 'priority' },
+        //   { header: 'Created At', key: 'createdAt' }
+        // ],
+        // client: [
+        //   { header: 'Case ID', key: 'caseId' },
+        //   { header: 'Product', key: 'product' },
+        //   { header: 'Updated Product Name', key: 'updatedProductName' },
+        //   { header: 'Status', key: 'status' },
+        //   { header: 'Case Status', key: 'caseStatus' },
+        //   { header: 'Priority', key: 'priority' },
+        //   { header: 'Created At', key: 'createdAt' },
+        //   { header: 'Remarks', key: 'remarks' }
+        // ]
+      };
+
+      // Add columns to sheet
+      sheet.columns = columns[role] || columns.client;
+
+      // MongoDB cursor for streaming
+      const cursor = KYC.find(query).lean().cursor();
+
+      for await (const doc of cursor) {
+        let record = doc;
+        
+        // Format dates for Excel
+        if (record.createdAt) {
+          record.createdAt = new Date(record.createdAt).toLocaleString();
         }
-      });
+        if (record.updatedAt) {
+          record.updatedAt = new Date(record.updatedAt).toLocaleString();
+        }
+
+        // Add row to sheet
+        sheet.addRow(record).commit();
+      }
+
+      // Finalize the workbook
+      await workbook.commit();
     }
-
-    // Convert to plain object and remove any Mongoose-specific fields
-    record = JSON.parse(JSON.stringify(record));
-    
-    if (firstChunk) {
-      headers = Object.keys(record);
-      // Write headers with first record
-      XLSX.utils.sheet_add_json(worksheet, [record], { header: headers, skipHeader: false });
-      firstChunk = false;
-    } else {
-      // Ensure all records have the same columns in the same order
-      const orderedRecord = {};
-      headers.forEach(header => {
-        orderedRecord[header] = record[header];
-      });
-      XLSX.utils.sheet_add_json(worksheet, [orderedRecord], { skipHeader: true, origin: -1 });
-    }
-  }
-
-  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-  
-  res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  return res.send(buffer);
-}
-
   } catch (error) {
     console.error('Error in getCaseDetails:', error);
     res.status(500).json({ 
@@ -293,14 +497,16 @@ if (download) {
 
 // exports.getCaseDetails = async (req, res) => {
 //   try {
-//     const { type, year, month, clientType, clientCode, updatedProductName, download } = req.query;
+//     const { type, year, month, clientType, clientCode, updatedProductName,  vendorName,download,levelData } = req.query;
 //     const { role, user, code } = req.body.requestBody;
 //     const userClientCode = code;
+
+//     // console.log("download",download)
     
 //     // Base query with role enforcement
 //     let query = {};
 //     if (role === 'employee') {
-//       query = { listByEmployee: user };
+//       query.listByEmployee = user;
 //     } 
 //     if (role === 'client') {
 //       if (!userClientCode) {
@@ -309,22 +515,40 @@ if (download) {
 //           message: "Client code is required"
 //         });
 //       }
-//       query = { clientCode: userClientCode };
+//       query.clientCode = userClientCode;
 //     }
 
 //     // Handle today cases
-//     if (type === 'today') {
+//     // if (type === 'today' || levelData === 'todaydata') {
+//     //   const startOfDay = new Date();
+//     //   startOfDay.setHours(0, 0, 0, 0);
+//     //   query.createdAt = { $gte: startOfDay };
+//     // } 
+//       if (type === 'todayNewPending' || type === 'todayPending' || type === 'todayClosed' || type === 'todayPriority') {
 //       const startOfDay = new Date();
 //       startOfDay.setHours(0, 0, 0, 0);
 //       query.createdAt = { $gte: startOfDay };
 //     } 
+    
+//     // Case type filters
+//     if (type === 'todayNewPending') query.caseStatus = 'New Pending';
+//     else if (type === 'todayPending') query.caseStatus = 'Pending';
+//     else if (type === 'todayClosed') query.status = 'Closed';
+//     else if (type === 'todayPriority') query.priority = 'High';
+    
+//     // Date filters (excluding today cases)
+//     if (!['todayNewPending', 'todayPending', 'todayClosed', 'todayPriority'].includes(type)) {
+//       if (year) query.year = year;
+//       if (month) query.month = month;
+//     }
+    
 //     // Case type filters
 //     else if (type === 'New Pending') query.caseStatus = 'New Pending';
 //     else if (type === 'closed') query.status = 'Closed';
 //     else if (type === 'highPriority') query.priority = 'Urgent';
     
 //     // Date filters (excluding today cases)
-//     if (type !== 'today') {
+//     if (type !== 'today' || levelData !== 'todaydata') {
 //       if (year) query.year = year;
 //       if (month) query.month = month;
 //     }
@@ -341,129 +565,229 @@ if (download) {
 //       query.clientCode = clientCode;
 //     }
 //     if (updatedProductName) query.updatedProductName = updatedProductName;
-
-//     // Get full records
-//     let fullRecords = await KYC.find(query).lean();
+//     if (vendorName) query.vendorName = vendorName;
 
 //     // Determine hierarchy level
+
+//     let groupByField;
+//     if (type === 'todayNewPending') {
+//       groupByField = vendorName ? '$updatedProductName' : '$vendorName';
+//     } else if (type === 'todayPending') {
+//       groupByField = clientCode ? '$updatedProductName' : '$clientCode';
+//     } else if (type === 'todayClosed' || type === 'todayPriority') {
+//       groupByField = updatedProductName ? null : 
+//                     clientCode ? '$updatedProductName' : 
+//                     clientType ? '$clientCode' : 
+//                     '$clientType';
+//     } else {
+//       groupByField = updatedProductName ? null : 
+//                     clientCode ? '$updatedProductName' : 
+//                     clientType ? '$clientCode' : 
+//                     month ? '$clientType' :
+//                     year ? '$month' :
+//                     '$year';
+//     }
+
 //     const hierarchyLevel = updatedProductName ? 'productDetails' : 
 //       clientCode ? 'updatedProductName' : 
 //       clientType ? 'clientCode' : 
 //       type === 'today' || month ? 'clientType' : 
 //       year ? 'month' : 'year';
 
-//     // Return aggregated data for navigation
-//     let data = [];
-    
-//     if (hierarchyLevel === 'productDetails') {
-//       data = fullRecords;
-//     }
-//     else if (hierarchyLevel === 'updatedProductName') {
-//       const productMap = new Map();
-//       fullRecords.forEach(item => {
-//         const productName = item.updatedProductName;
-//         const count = productMap.get(productName) || 0;
-//         productMap.set(productName, count + 1);
-//       });
-//       data = Array.from(productMap, ([name, count]) => ({ name, count }));
-//     }
-//     else if (hierarchyLevel === 'clientCode') {
-//       const clientMap = new Map();
-//       fullRecords.forEach(item => {
-//         const count = clientMap.get(item.clientCode) || 0;
-//         clientMap.set(item.clientCode, count + 1);
-//       });
-//       data = Array.from(clientMap, ([name, count]) => ({ name, count }));
-//     }
-//     else if (hierarchyLevel === 'clientType') {
-//       const typeMap = new Map();
-//       fullRecords.forEach(item => {
-//         const count = typeMap.get(item.clientType) || 0;
-//         typeMap.set(item.clientType, count + 1);
-//       });
-//       data = Array.from(typeMap, ([name, count]) => ({ name, count }));
-//     }
-//     else if (hierarchyLevel === 'month') {
-//       const monthMap = new Map();
-//       fullRecords.forEach(item => {
-//         const count = monthMap.get(item.month) || 0;
-//         monthMap.set(item.month, count + 1);
-//       });
-//       data = Array.from(monthMap, ([name, count]) => ({ name, count }));
-//     }
-//     else if (hierarchyLevel === 'year') {
-//       const yearMap = new Map();
-//       fullRecords.forEach(item => {
-//         const count = yearMap.get(item.year) || 0;
-//         yearMap.set(item.year, count + 1);
-//       });
-//       data = Array.from(yearMap, ([name, count]) => ({ name, count }));
-//     }
+//       console.log("query:",query)
 
-//     // Handle Excel download
-//     if (download) {
-//       const allowedColumns = {
-//         admin: null,
-//         employee: null,
-//         client: [
-//           'caseId',
-//           'attachments',
-//           'remarks',
-//           'name',
-//           'details',
-//           'details1',
-//           'priority',
-//           'correctUPN',
-//           'product',
-//           'updatedProductName',
-//           'accountNumber',
-//           'requirement',
-//           'updatedRequirement',
-//           'clientCode',
-//           'dateIn',
-//           'status',
-//           'dateInDate',
-//           'caseStatus',
-//           'productType',
-//           'listByEmployee',
-//           'dateOut',
-//           'sentBy',
-//           'caseDoneBy',
-//           'customerCare',
-//           'NameUploadBy',
-//           'sentDate',
-//           'isRechecked'
-//         ]
-//       };
 
-//       if (role === 'client' && allowedColumns.client) {
-//         fullRecords = fullRecords.map(record => {
-//           const filteredRecord = {};
-//           allowedColumns.client.forEach(col => {
-//             if (record[col] !== undefined) {
-//               filteredRecord[col] = record[col];
-//             }
-//           });
-//           return filteredRecord;
-//         });
+//     // For non-download requests, use aggregation for counts only
+//     if (!download) {
+//       let groupByField;
+//       switch (hierarchyLevel) {
+//         case 'updatedProductName': groupByField = '$updatedProductName'; break;
+//         case 'clientCode': groupByField = '$clientCode'; break;
+//         case 'clientType': groupByField = '$clientType'; break;
+//         case 'month': groupByField = '$month'; break;
+//         case 'year': groupByField = '$year'; break;
 //       }
 
-//       const worksheet = XLSX.utils.json_to_sheet(fullRecords);
-//       const workbook = XLSX.utils.book_new();
-//       XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
-//       const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      
-//       res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
-//       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-//       return res.send(buffer);
+//       if (hierarchyLevel === 'productDetails') {
+//         // For product details, we need the full records but with pagination
+//         const page = parseInt(req.query.page) || 1;
+//         const limit = parseInt(req.query.limit) || 50;
+//         const skip = (page - 1) * limit;
+
+//         const [records, total] = await Promise.all([
+//           KYC.find(query).skip(skip).limit(limit).lean(),
+//           KYC.countDocuments(query)
+//         ]);
+
+//         return res.json({
+//           success: true,
+//           data: records,
+//           total,
+//           page,
+//           pages: Math.ceil(total / limit),
+//           hierarchyLevel
+//         });
+//       } else {
+//         // Use MongoDB aggregation for counting
+//         const aggregationPipeline = [
+//           { $match: query },
+//           { $group: { 
+//             _id: groupByField, 
+//             count: { $sum: 1 }
+//           }},
+//           { $project: {
+//             name: '$_id',
+//             count: 1,
+//             _id: 0
+//           }}
+//         ];
+
+//         const data = await KYC.aggregate(aggregationPipeline);
+//         return res.json({ 
+//           success: true,
+//           data,
+//           hierarchyLevel
+//         });
+//       }
 //     }
 
-//     res.json({ 
-//       success: true,
-//       data,
-//       records: fullRecords,
-//       hierarchyLevel
-//     });
+//     // Handle Excel download - stream data directly without loading all into memory
+//     // Handle Excel download - stream data directly without loading all into memory
+//     if (download) {
+//   console.log("query:", query);
+
+//   res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
+//   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+//   // Create streaming workbook
+//   const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res });
+//   const sheet = workbook.addWorksheet('CaseDetails');
+
+//   const allowedColumns = {
+//     admin: null,
+//     employee: null,
+//     client: [
+//       'caseId', 'attachments', 'remarks', 'name', 'details', 'details1',
+//       'priority', 'correctUPN', 'product', 'updatedProductName', 'accountNumber',
+//       'requirement', 'updatedRequirement', 'clientCode', 'dateIn', 'status',
+//       'dateInDate', 'caseStatus', 'productType', 'listByEmployee', 'dateOut',
+//       'sentBy', 'caseDoneBy', 'customerCare', 'NameUploadBy', 'sentDate', 'isRechecked'
+//     ]
+//   };
+
+//   // MongoDB cursor for streaming
+//   const cursor = KYC.find(query).lean().cursor();
+
+//   let headersSet = false;
+//   let headers = [];
+
+//   for await (const doc of cursor) {
+//     let record = doc;
+
+//     if (role === 'client' && allowedColumns.client) {
+//       record = {};
+//       allowedColumns.client.forEach(col => {
+//         record[col] = doc[col] ?? '';
+//       });
+//     }
+
+//     if (!headersSet) {
+//       headers = Object.keys(record);
+//       sheet.addRow(headers).commit();
+//       headersSet = true;
+//     }
+
+//     const rowData = headers.map(h => record[h] ?? '');
+//     sheet.addRow(rowData).commit();
+//   }
+
+//   // Finalize the workbook
+//   await workbook.commit();
+// }
+// // if (download) {
+// //   const allowedColumns = {
+// //     admin: null,
+// //     employee: null,
+// //     client: [
+// //       'caseId',
+// //       'attachments',
+// //       'remarks',
+// //       'name',
+// //       'details',
+// //       'details1',
+// //       'priority',
+// //       'correctUPN',
+// //       'product',
+// //       'updatedProductName',
+// //       'accountNumber',
+// //       'requirement',
+// //       'updatedRequirement',
+// //       'clientCode',
+// //       'dateIn',
+// //       'status',
+// //       'dateInDate',
+// //       'caseStatus',
+// //       'productType',
+// //       'listByEmployee',
+// //       'dateOut',
+// //       'sentBy',
+// //       'caseDoneBy',
+// //       'customerCare',
+// //       'NameUploadBy',
+// //       'sentDate',
+// //       'isRechecked'
+// //     ]
+// //   };
+
+// //   // Create a cursor for streaming with lean() to get plain objects
+// //   console.log("query:",query)
+// //   const cursor = KYC.find(query).lean().cursor();
+  
+// //   // Create workbook and worksheet
+// //   const workbook = XLSX.utils.book_new();
+// //   const worksheet = XLSX.utils.json_to_sheet([]);
+// //   XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
+
+// //   // Stream data in chunks
+// //   let firstChunk = true;
+// //   let headers = [];
+  
+// //   for await (const doc of cursor) {
+// //     let record = doc;
+    
+// //     if (role === 'client' && allowedColumns.client) {
+// //       record = {};
+// //       allowedColumns.client.forEach(col => {
+// //         if (doc[col] !== undefined) {
+// //           record[col] = doc[col];
+// //         }
+// //       });
+// //     }
+
+// //     // Convert to plain object and remove any Mongoose-specific fields
+// //     record = JSON.parse(JSON.stringify(record));
+    
+// //     if (firstChunk) {
+// //       headers = Object.keys(record);
+// //       // Write headers with first record
+// //       XLSX.utils.sheet_add_json(worksheet, [record], { header: headers, skipHeader: false });
+// //       firstChunk = false;
+// //     } else {
+// //       // Ensure all records have the same columns in the same order
+// //       const orderedRecord = {};
+// //       headers.forEach(header => {
+// //         orderedRecord[header] = record[header];
+// //       });
+// //       XLSX.utils.sheet_add_json(worksheet, [orderedRecord], { skipHeader: true, origin: -1 });
+// //     }
+// //   }
+
+// //   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  
+// //   res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
+// //   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+// //   return res.send(buffer);
+// // }
 
 //   } catch (error) {
 //     console.error('Error in getCaseDetails:', error);
@@ -474,7 +798,6 @@ if (download) {
 //     });
 //   }
 // };
-
 
 exports.sendManualUpdate = async (req, res) => {
   try {
