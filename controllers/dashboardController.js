@@ -9,6 +9,7 @@ const {
 } = require('../utils/dashboardUpdates');
 const { ClientCode } = require('../models/MappingItems');
 const ExcelJS = require('exceljs');
+const moment = require('moment-timezone');
 
 
 // Consolidated dashboard data endpoint with client role support
@@ -108,10 +109,14 @@ exports.getCaseDetails = async (req, res) => {
 
     // Handle today cases
     if (today) {
-      const todayDate = new Date(today);
-      
-      query.createdAt =  todayDate ;
-      // query.createdAt = { $gte: todayDate, $lt: tomorrow };
+      const startOfToday = moment.tz("Asia/Kolkata").startOf("day").toDate();
+const startOfTomorrow = moment.tz("Asia/Kolkata").add(1, "day").startOf("day").toDate();
+
+// MongoDB query for ONLY today
+query.createdAt = { 
+  $gte: startOfToday, 
+  $lt: startOfTomorrow 
+};
     }
     
     // Apply type-specific filters
