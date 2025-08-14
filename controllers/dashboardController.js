@@ -112,7 +112,8 @@ exports.getCaseDetails = async (req, res) => {
       todayDate.setHours(0, 0, 0, 0);
       const tomorrow = new Date(todayDate);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      query.createdAt = { $gte: todayDate, $lt: tomorrow };
+      query.createdAt = { $gte: todayDate };
+      // query.createdAt = { $gte: todayDate, $lt: tomorrow };
     }
     
     // Apply type-specific filters
