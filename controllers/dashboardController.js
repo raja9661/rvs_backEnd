@@ -123,6 +123,7 @@ query.createdAt = {
     switch(type) {
       case 'totalPending':
         query.status = 'Pending';
+         query.caseStatus = 'Sent';
         break;
       case 'totalNewPending':
         query.caseStatus = 'New Pending';
@@ -138,6 +139,7 @@ query.createdAt = {
         break;
       case 'todayPending':
         query.status = 'Pending';
+         query.caseStatus = 'Sent';
         break;
       case 'todayClosed':
         query.status = 'Closed';
@@ -174,36 +176,65 @@ query.createdAt = {
       //   groupByField = clientCode ? '$updatedProductName' : '$clientCode';
       //   break;
       case 'todayNewPending':
-    groupByField = updatedProductName ? null : 
-                  vendorName ? '$updatedProductName' : 
-                  '$vendorName';
+        if(role === 'client'){
+          groupByField = updatedProductName ? null : 
+                  '$updatedProductName';
+        }else{
+          groupByField = clientCode ? null : 
+                  updatedProductName ? '$clientCode' : 
+                  '$updatedProductName';
+        }
+    
     break;
   case 'todayPending':
-    groupByField = updatedProductName ? null : 
-                  clientCode ? '$updatedProductName' : 
-                  '$clientCode';
+    if(role === 'client'){
+      groupByField = updatedProductName ? null : 
+                  '$updatedProductName';
+    }else{
+      groupByField = vendorName ? null : 
+                  updatedProductName ? '$vendorName' : 
+                  '$updatedProductName';
+
+    }
+    
     break;
       case 'todayClosed':
       case 'todayHighPriority':
+        if(role === 'client'){
+          groupByField = updatedProductName ? null : 
+                  '$updatedProductName';
+        }else{
         groupByField = updatedProductName ? null : 
                       clientCode ? '$updatedProductName' : 
                       clientType ? '$clientCode' : 
-                      '$clientType';
+                      '$clientType';}
         break;
       case 'monthly':
       case 'today':
+        if(role === 'client'){
+          groupByField = updatedProductName ? null : 
+                  '$updatedProductName';
+        }else{
         groupByField = updatedProductName ? null : 
                       clientCode ? '$updatedProductName' : 
                       clientType ? '$clientCode' : 
-                      '$clientType';
+                      '$clientType';}
         break;
       default: // total cases and other totals
+      if(role === 'client'){
+        groupByField = updatedProductName ? null : 
+                      month ? '$updatedProductName' :
+                      year ? '$month' :
+                      '$year';
+      }else{
         groupByField = updatedProductName ? null : 
                       clientCode ? '$updatedProductName' : 
                       clientType ? '$clientCode' : 
                       month ? '$clientType' :
                       year ? '$month' :
                       '$year';
+      }
+        
     }
 
     // For non-download requests, use aggregation for counts
@@ -310,185 +341,333 @@ query.createdAt = {
 
     // Handle Excel download - stream data directly without loading all into memory
     if (download) {
-      res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
-      // Create streaming workbook
-      const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res });
-      const sheet = workbook.addWorksheet('CaseDetails');
-
-      // Define columns based on role
-      const columns = {
-        admin: [
-    
-    { header: 'Case ID', key: 'caseId' },
-    { header: 'Attachments', key: 'attachments' },
-    { header: 'Remarks', key: 'remarks' },
-    { header: 'Name', key: 'name' },
-    { header: 'Details', key: 'details' },
-    { header: 'Details 1', key: 'details1' },
-    { header: 'Priority', key: 'priority' },
-    { header: 'Correct UPN', key: 'correctUPN' },
-    { header: 'Product', key: 'product' },
-    { header: 'Updated Product Name', key: 'updatedProductName' },
-    { header: 'Account Number', key: 'accountNumber' },
-    { header: 'Requirement', key: 'requirement' },
-    { header: 'Updated Requirement', key: 'updatedRequirement' },
-    { header: 'Account Number Digit', key: 'accountNumberDigit' },
-    { header: 'Bank Code', key: 'bankCode' },
-    { header: 'Client Code', key: 'clientCode' },
-    { header: 'Vendor Name', key: 'vendorName' },
-    { header: 'Vendor Status', key: 'vendorStatus' },
-    { header: 'Date In', key: 'dateIn' },
-    { header: 'Date In Day', key: 'dateInDate' },
-    { header: 'Status', key: 'status' },
-    { header: 'Case Status', key: 'caseStatus' },
-    { header: 'Product Type', key: 'productType' },
-    { header: 'List By Employee', key: 'listByEmployee' },
-    { header: 'Date Out', key: 'dateOut' },
-    { header: 'Date Out Day', key: 'dateOutInDay' },
-    { header: 'Sent By', key: 'sentBy' },
-    { header: 'Auto Or Manual', key: 'autoOrManual' },
-    { header: 'Case Done By', key: 'caseDoneBy' },
-    { header: 'Client TAT', key: 'clientTAT' },
-    { header: 'Customer Care', key: 'customerCare' },
-    { header: 'Name Upload By', key: 'NameUploadBy' },
-    { header: 'Sent Date', key: 'sentDate' },
-    { header: 'Sent Date Day', key: 'sentDateInDay' },
-    { header: 'Client Type', key: 'clientType' },
-    { header: 'Dedup By', key: 'dedupBy' },
-    { header: 'IP Address', key: 'ipAddress' },
-    { header: 'Is Rechecked', key: 'isRechecked' },
-    
-  ],
-  employee: [
-    { header: 'Case ID', key: 'caseId' },
-    { header: 'Attachments', key: 'attachments' },
-    { header: 'Remarks', key: 'remarks' },
-    { header: 'Name', key: 'name' },
-    { header: 'Details', key: 'details' },
-    { header: 'Details 1', key: 'details1' },
-    { header: 'Priority', key: 'priority' },
-    { header: 'Correct UPN', key: 'correctUPN' },
-    { header: 'Product', key: 'product' },
-    { header: 'Updated Product Name', key: 'updatedProductName' },
-    { header: 'Account Number', key: 'accountNumber' },
-    { header: 'Requirement', key: 'requirement' },
-    { header: 'Updated Requirement', key: 'updatedRequirement' },
-    { header: 'Account Number Digit', key: 'accountNumberDigit' },
-    { header: 'Bank Code', key: 'bankCode' },
-    { header: 'Client Code', key: 'clientCode' },
-    { header: 'Vendor Name', key: 'vendorName' },
-    { header: 'Date In', key: 'dateIn' },
-    { header: 'Date In Day', key: 'dateInDate' },
-    { header: 'Case Status', key: 'caseStatus' },
-    { header: 'Product Type', key: 'productType' },
-    { header: 'List By Employee', key: 'listByEmployee' },
-    { header: 'Date Out', key: 'dateOut' },
-    { header: 'Date Out Day', key: 'dateOutInDay' },
-    { header: 'Sent By', key: 'sentBy' },
-    { header: 'Auto Or Manual', key: 'autoOrManual' },
-    { header: 'Case Done By', key: 'caseDoneBy' },
-    { header: 'Client TAT', key: 'clientTAT' },
-    { header: 'Customer Care', key: 'customerCare' },
-    { header: 'Sent Date', key: 'sentDate' },
-    { header: 'Sent Date Day', key: 'sentDateInDay' },
-    { header: 'Client Type', key: 'clientType' },
-    { header: 'Dedup By', key: 'dedupBy' },
-    { header: 'IP Address', key: 'ipAddress' },
-    { header: 'Is Rechecked', key: 'isRechecked' },
-    { header: 'Created At', key: 'createdAt' },
-    { header: 'Updated At', key: 'updatedAt' }
-  ],
-  client: [
-    { header: 'Case ID', key: 'caseId' },
-    { header: 'Attachments', key: 'attachments' },
-    { header: 'Remarks', key: 'remarks' },
-    { header: 'Name', key: 'name' },
-    { header: 'Details', key: 'details' },
-    { header: 'Details 1', key: 'details1' },
-    { header: 'Priority', key: 'priority' },
-    { header: 'Correct UPN', key: 'correctUPN' },
-    { header: 'Product', key: 'product' },
-    { header: 'Updated Product Name', key: 'updatedProductName' }, // Note: original list had typo
-    { header: 'Account Number', key: 'accountNumber' },
-    { header: 'Requirement', key: 'requirement' },
-    { header: 'Updated Requirement', key: 'updatedRequirement' },
-    { header: 'Client Code', key: 'clientCode' },
-    { header: 'Date In', key: 'dateIn' },
-    { header: 'Date In Day', key: 'dateInDate' },
-    { header: 'Case Status', key: 'caseStatus' },
-    { header: 'Product Type', key: 'productType' },
-    { header: 'List By Employee', key: 'listByEmployee' },
-    { header: 'Date Out', key: 'dateOut' },
-    { header: 'Date Out Day', key: 'dateOutInDay' },
-    { header: 'Sent By', key: 'sentBy' },
-    { header: 'Case Done By', key: 'caseDoneBy' },
-    { header: 'Customer Care', key: 'customerCare' },
-    { header: 'IP Address', key: 'ipAddress' },
-    { header: 'Is Rechecked', key: 'isRechecked' },
+  // Streaming workbook
+  const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res });
+  const sheet = workbook.addWorksheet('CaseDetails');
   
-  ]
-        // admin: [
-        //   { header: 'Case ID', key: 'caseId' },
-        //   { header: 'Client Type', key: 'clientType' },
-        //   { header: 'Client Code', key: 'clientCode' },
-        //   { header: 'Vendor Name', key: 'vendorName' },
-        //   { header: 'Product', key: 'product' },
-        //   { header: 'Updated Product Name', key: 'updatedProductName' },
-        //   { header: 'Account Number', key: 'accountNumber' },
-        //   { header: 'Status', key: 'status' },
-        //   { header: 'Case Status', key: 'caseStatus' },
-        //   { header: 'Priority', key: 'priority' },
-        //   { header: 'Created At', key: 'createdAt' },
-        //   { header: 'Updated At', key: 'updatedAt' }
-        // ],
-        // employee: [
-        //   { header: 'Case ID', key: 'caseId' },
-        //   { header: 'Client Code', key: 'clientCode' },
-        //   { header: 'Product', key: 'product' },
-        //   { header: 'Updated Product Name', key: 'updatedProductName' },
-        //   { header: 'Status', key: 'status' },
-        //   { header: 'Case Status', key: 'caseStatus' },
-        //   { header: 'Priority', key: 'priority' },
-        //   { header: 'Created At', key: 'createdAt' }
-        // ],
-        // client: [
-        //   { header: 'Case ID', key: 'caseId' },
-        //   { header: 'Product', key: 'product' },
-        //   { header: 'Updated Product Name', key: 'updatedProductName' },
-        //   { header: 'Status', key: 'status' },
-        //   { header: 'Case Status', key: 'caseStatus' },
-        //   { header: 'Priority', key: 'priority' },
-        //   { header: 'Created At', key: 'createdAt' },
-        //   { header: 'Remarks', key: 'remarks' }
-        // ]
+
+  // Define columns per role
+  const columns = {
+    admin: [
+      { header: 'S.No', key: 'serialNumber' },
+      { header: 'Case ID', key: 'caseId' },
+      { header: 'Attachments', key: 'attachments' },
+      { header: 'Remarks', key: 'remarks' },
+      { header: 'Name', key: 'name' },
+      { header: 'Details', key: 'details' },
+      { header: 'Details 1', key: 'details1' },
+      { header: 'Priority', key: 'priority' },
+      { header: 'Correct UPN', key: 'correctUPN' },
+      { header: 'Product', key: 'product' },
+      { header: 'Updated Product Name', key: 'updatedProductName' },
+      { header: 'Account Number', key: 'accountNumber' },
+      { header: 'Requirement', key: 'requirement' },
+      { header: 'Updated Requirement', key: 'updatedRequirement' },
+      { header: 'Account Number Digit', key: 'accountNumberDigit' },
+      { header: 'Bank Code', key: 'bankCode' },
+      { header: 'Client Code', key: 'clientCode' },
+      { header: 'Vendor Name', key: 'vendorName' },
+      { header: 'Vendor Status', key: 'vendorStatus' },
+      { header: 'Date In', key: 'dateIn' },
+      { header: 'Date In Day', key: 'dateInDate' },
+      { header: 'Status', key: 'status' },
+      { header: 'Case Status', key: 'caseStatus' },
+      { header: 'Product Type', key: 'productType' },
+      { header: 'List By Employee', key: 'listByEmployee' },
+      { header: 'Date Out', key: 'dateOut' },
+      { header: 'Date Out Day', key: 'dateOutInDay' },
+      { header: 'Sent By', key: 'sentBy' },
+      { header: 'Auto Or Manual', key: 'autoOrManual' },
+      { header: 'Case Done By', key: 'caseDoneBy' },
+      { header: 'Client TAT', key: 'clientTAT' },
+      { header: 'Customer Care', key: 'customerCare' },
+      { header: 'Name Upload By', key: 'NameUploadBy' },
+      { header: 'Sent Date', key: 'sentDate' },
+      { header: 'Sent Date Day', key: 'sentDateInDay' },
+      { header: 'Client Type', key: 'clientType' },
+      { header: 'Dedup By', key: 'dedupBy' },
+      { header: 'IP Address', key: 'ipAddress' },
+      { header: 'Is Rechecked', key: 'isRechecked' }
+    ],
+    employee: [
+      { header: 'S.No', key: 'serialNumber' },
+      { header: 'Case ID', key: 'caseId' },
+      { header: 'Attachments', key: 'attachments' },
+      { header: 'Remarks', key: 'remarks' },
+      { header: 'Name', key: 'name' },
+      { header: 'Details', key: 'details' },
+      { header: 'Details 1', key: 'details1' },
+      { header: 'Priority', key: 'priority' },
+      { header: 'Correct UPN', key: 'correctUPN' },
+      { header: 'Product', key: 'product' },
+      { header: 'Updated Product Name', key: 'updatedProductName' },
+      { header: 'Account Number', key: 'accountNumber' },
+      { header: 'Requirement', key: 'requirement' },
+      { header: 'Updated Requirement', key: 'updatedRequirement' },
+      { header: 'Account Number Digit', key: 'accountNumberDigit' },
+      { header: 'Bank Code', key: 'bankCode' },
+      { header: 'Client Code', key: 'clientCode' },
+      { header: 'Vendor Name', key: 'vendorName' },
+      { header: 'Date In', key: 'dateIn' },
+      { header: 'Date In Day', key: 'dateInDate' },
+      { header: 'Case Status', key: 'caseStatus' },
+      { header: 'Product Type', key: 'productType' },
+      { header: 'List By Employee', key: 'listByEmployee' },
+      { header: 'Date Out', key: 'dateOut' },
+      { header: 'Date Out Day', key: 'dateOutInDay' },
+      { header: 'Sent By', key: 'sentBy' },
+      { header: 'Auto Or Manual', key: 'autoOrManual' },
+      { header: 'Case Done By', key: 'caseDoneBy' },
+      { header: 'Client TAT', key: 'clientTAT' },
+      { header: 'Customer Care', key: 'customerCare' },
+      { header: 'Sent Date', key: 'sentDate' },
+      { header: 'Sent Date Day', key: 'sentDateInDay' },
+      { header: 'Client Type', key: 'clientType' },
+      { header: 'Dedup By', key: 'dedupBy' },
+      { header: 'IP Address', key: 'ipAddress' },
+      { header: 'Is Rechecked', key: 'isRechecked' },
+      { header: 'Created At', key: 'createdAt' },
+      { header: 'Updated At', key: 'updatedAt' }
+    ],
+    client: [
+      { header: 'S.No', key: 'serialNumber' },
+      { header: 'Case ID', key: 'caseId' },
+      { header: 'Attachments', key: 'attachments' },
+      { header: 'Remarks', key: 'remarks' },
+      { header: 'Name', key: 'name' },
+      { header: 'Details', key: 'details' },
+      { header: 'Details 1', key: 'details1' },
+      { header: 'Priority', key: 'priority' },
+      { header: 'Correct UPN', key: 'correctUPN' },
+      { header: 'Product', key: 'product' },
+      { header: 'Updated Product Name', key: 'updatedProductName' },
+      { header: 'Account Number', key: 'accountNumber' },
+      { header: 'Requirement', key: 'requirement' },
+      { header: 'Updated Requirement', key: 'updatedRequirement' },
+      { header: 'Client Code', key: 'clientCode' },
+      { header: 'Date In', key: 'dateIn' },
+      { header: 'Date In Day', key: 'dateInDate' },
+      { header: 'Case Status', key: 'caseStatus' },
+      { header: 'Product Type', key: 'productType' },
+      { header: 'List By Employee', key: 'listByEmployee' },
+      { header: 'Date Out', key: 'dateOut' },
+      { header: 'Date Out Day', key: 'dateOutInDay' },
+      { header: 'Sent By', key: 'sentBy' },
+      { header: 'Case Done By', key: 'caseDoneBy' },
+      { header: 'Customer Care', key: 'customerCare' },
+      // { header: 'IP Address', key: 'ipAddress' },
+      { header: 'Is Rechecked', key: 'isRechecked' }
+    ]
+  };
+
+  sheet.columns = columns[role] || columns.client;
+
+  let serial = 1;
+  const cursor = KYC.find(query).lean().cursor();
+  for await (const doc of cursor) {
+  let record = { ...doc };
+
+  // Add serial number
+  record.serialNumber = serial++;
+
+  // Format dates
+  if (record.createdAt) record.createdAt = new Date(record.createdAt).toLocaleString();
+  if (record.updatedAt) record.updatedAt = new Date(record.updatedAt).toLocaleString();
+
+  // Add row first
+  const row = sheet.addRow(record);
+
+  // Format attachments as clickable hyperlinks
+  if (record.attachments && Array.isArray(record.attachments)) {
+    let firstAttachment = record.attachments[0]; // pick first or loop through
+    if (firstAttachment && firstAttachment.location) {
+      let cell = row.getCell("attachments"); // make sure column key = 'attachments'
+      cell.value = {
+        text: "Open Attachment",       // what user sees in Excel cell
+        hyperlink: firstAttachment.location // actual URL
       };
-
-      // Add columns to sheet
-      sheet.columns = columns[role] || columns.client;
-
-      // MongoDB cursor for streaming
-      const cursor = KYC.find(query).lean().cursor();
-
-      for await (const doc of cursor) {
-        let record = doc;
-        
-        // Format dates for Excel
-        if (record.createdAt) {
-          record.createdAt = new Date(record.createdAt).toLocaleString();
-        }
-        if (record.updatedAt) {
-          record.updatedAt = new Date(record.updatedAt).toLocaleString();
-        }
-
-        // Add row to sheet
-        sheet.addRow(record).commit();
-      }
-
-      // Finalize the workbook
-      await workbook.commit();
+      cell.font = { color: { argb: 'FF0000FF' }, underline: true }; // blue + underline
     }
+  }
+
+  row.commit();
+}
+
+
+  // for await (const doc of cursor) {
+  //   let record = { ...doc };
+
+  //   // Add serial number
+  //   record.serialNumber = serial++;
+
+  //   // Format dates
+  //   if (record.createdAt) record.createdAt = new Date(record.createdAt).toLocaleString();
+  //   if (record.updatedAt) record.updatedAt = new Date(record.updatedAt).toLocaleString();
+
+  //   // Format attachments (hyperlink)
+  //   if (record.attachments && Array.isArray(record.attachments)) {
+  //     record.attachments = record.attachments.map(att => ({
+        
+  //       hyperlink: att.location
+  //     }));
+  //   }
+
+  //   sheet.addRow(record).commit();
+  // }
+
+  await workbook.commit();
+}
+
+  //   if (download) {
+  //     res.setHeader('Content-Disposition', `attachment; filename="${type}_cases.xlsx"`);
+  //     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+  //     // Create streaming workbook
+  //     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res });
+  //     const sheet = workbook.addWorksheet('CaseDetails');
+
+  //     // Define columns based on role
+  //     const columns = {
+  //       admin: [
+    
+  //   { header: 'Case ID', key: 'caseId' },
+  //   { header: 'Attachments', key: 'attachments' },
+  //   { header: 'Remarks', key: 'remarks' },
+  //   { header: 'Name', key: 'name' },
+  //   { header: 'Details', key: 'details' },
+  //   { header: 'Details 1', key: 'details1' },
+  //   { header: 'Priority', key: 'priority' },
+  //   { header: 'Correct UPN', key: 'correctUPN' },
+  //   { header: 'Product', key: 'product' },
+  //   { header: 'Updated Product Name', key: 'updatedProductName' },
+  //   { header: 'Account Number', key: 'accountNumber' },
+  //   { header: 'Requirement', key: 'requirement' },
+  //   { header: 'Updated Requirement', key: 'updatedRequirement' },
+  //   { header: 'Account Number Digit', key: 'accountNumberDigit' },
+  //   { header: 'Bank Code', key: 'bankCode' },
+  //   { header: 'Client Code', key: 'clientCode' },
+  //   { header: 'Vendor Name', key: 'vendorName' },
+  //   { header: 'Vendor Status', key: 'vendorStatus' },
+  //   { header: 'Date In', key: 'dateIn' },
+  //   { header: 'Date In Day', key: 'dateInDate' },
+  //   { header: 'Status', key: 'status' },
+  //   { header: 'Case Status', key: 'caseStatus' },
+  //   { header: 'Product Type', key: 'productType' },
+  //   { header: 'List By Employee', key: 'listByEmployee' },
+  //   { header: 'Date Out', key: 'dateOut' },
+  //   { header: 'Date Out Day', key: 'dateOutInDay' },
+  //   { header: 'Sent By', key: 'sentBy' },
+  //   { header: 'Auto Or Manual', key: 'autoOrManual' },
+  //   { header: 'Case Done By', key: 'caseDoneBy' },
+  //   { header: 'Client TAT', key: 'clientTAT' },
+  //   { header: 'Customer Care', key: 'customerCare' },
+  //   { header: 'Name Upload By', key: 'NameUploadBy' },
+  //   { header: 'Sent Date', key: 'sentDate' },
+  //   { header: 'Sent Date Day', key: 'sentDateInDay' },
+  //   { header: 'Client Type', key: 'clientType' },
+  //   { header: 'Dedup By', key: 'dedupBy' },
+  //   { header: 'IP Address', key: 'ipAddress' },
+  //   { header: 'Is Rechecked', key: 'isRechecked' },
+    
+  // ],
+  // employee: [
+  //   { header: 'Case ID', key: 'caseId' },
+  //   { header: 'Attachments', key: 'attachments' },
+  //   { header: 'Remarks', key: 'remarks' },
+  //   { header: 'Name', key: 'name' },
+  //   { header: 'Details', key: 'details' },
+  //   { header: 'Details 1', key: 'details1' },
+  //   { header: 'Priority', key: 'priority' },
+  //   { header: 'Correct UPN', key: 'correctUPN' },
+  //   { header: 'Product', key: 'product' },
+  //   { header: 'Updated Product Name', key: 'updatedProductName' },
+  //   { header: 'Account Number', key: 'accountNumber' },
+  //   { header: 'Requirement', key: 'requirement' },
+  //   { header: 'Updated Requirement', key: 'updatedRequirement' },
+  //   { header: 'Account Number Digit', key: 'accountNumberDigit' },
+  //   { header: 'Bank Code', key: 'bankCode' },
+  //   { header: 'Client Code', key: 'clientCode' },
+  //   { header: 'Vendor Name', key: 'vendorName' },
+  //   { header: 'Date In', key: 'dateIn' },
+  //   { header: 'Date In Day', key: 'dateInDate' },
+  //   { header: 'Case Status', key: 'caseStatus' },
+  //   { header: 'Product Type', key: 'productType' },
+  //   { header: 'List By Employee', key: 'listByEmployee' },
+  //   { header: 'Date Out', key: 'dateOut' },
+  //   { header: 'Date Out Day', key: 'dateOutInDay' },
+  //   { header: 'Sent By', key: 'sentBy' },
+  //   { header: 'Auto Or Manual', key: 'autoOrManual' },
+  //   { header: 'Case Done By', key: 'caseDoneBy' },
+  //   { header: 'Client TAT', key: 'clientTAT' },
+  //   { header: 'Customer Care', key: 'customerCare' },
+  //   { header: 'Sent Date', key: 'sentDate' },
+  //   { header: 'Sent Date Day', key: 'sentDateInDay' },
+  //   { header: 'Client Type', key: 'clientType' },
+  //   { header: 'Dedup By', key: 'dedupBy' },
+  //   { header: 'IP Address', key: 'ipAddress' },
+  //   { header: 'Is Rechecked', key: 'isRechecked' },
+  //   { header: 'Created At', key: 'createdAt' },
+  //   { header: 'Updated At', key: 'updatedAt' }
+  // ],
+  // client: [
+  //   { header: 'Case ID', key: 'caseId' },
+  //   { header: 'Attachments', key: 'attachments' },
+  //   { header: 'Remarks', key: 'remarks' },
+  //   { header: 'Name', key: 'name' },
+  //   { header: 'Details', key: 'details' },
+  //   { header: 'Details 1', key: 'details1' },
+  //   { header: 'Priority', key: 'priority' },
+  //   { header: 'Correct UPN', key: 'correctUPN' },
+  //   { header: 'Product', key: 'product' },
+  //   { header: 'Updated Product Name', key: 'updatedProductName' }, // Note: original list had typo
+  //   { header: 'Account Number', key: 'accountNumber' },
+  //   { header: 'Requirement', key: 'requirement' },
+  //   { header: 'Updated Requirement', key: 'updatedRequirement' },
+  //   { header: 'Client Code', key: 'clientCode' },
+  //   { header: 'Date In', key: 'dateIn' },
+  //   { header: 'Date In Day', key: 'dateInDate' },
+  //   { header: 'Case Status', key: 'caseStatus' },
+  //   { header: 'Product Type', key: 'productType' },
+  //   { header: 'List By Employee', key: 'listByEmployee' },
+  //   { header: 'Date Out', key: 'dateOut' },
+  //   { header: 'Date Out Day', key: 'dateOutInDay' },
+  //   { header: 'Sent By', key: 'sentBy' },
+  //   { header: 'Case Done By', key: 'caseDoneBy' },
+  //   { header: 'Customer Care', key: 'customerCare' },
+  //   { header: 'IP Address', key: 'ipAddress' },
+  //   { header: 'Is Rechecked', key: 'isRechecked' },
+  
+  // ]
+        
+  //     };
+
+  //     // Add columns to sheet
+  //     sheet.columns = columns[role] || columns.client;
+
+  //     // MongoDB cursor for streaming
+  //     const cursor = KYC.find(query).lean().cursor();
+
+  //     for await (const doc of cursor) {
+  //       let record = doc;
+        
+  //       // Format dates for Excel
+  //       if (record.createdAt) {
+  //         record.createdAt = new Date(record.createdAt).toLocaleString();
+  //       }
+  //       if (record.updatedAt) {
+  //         record.updatedAt = new Date(record.updatedAt).toLocaleString();
+  //       }
+
+  //       // Add row to sheet
+  //       sheet.addRow(record).commit();
+  //     }
+
+  //     // Finalize the workbook
+  //     await workbook.commit();
+  //   }
   } catch (error) {
     console.error('Error in getCaseDetails:', error);
     res.status(500).json({ 

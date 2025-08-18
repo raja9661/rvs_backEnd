@@ -416,7 +416,7 @@ async function getRecentActivity(query = {}, limit = 20, role, user, clientCode)
   })
     .sort({ updatedAt: -1 })
     .limit(limit)
-    .select("caseId name caseStatus status priority updatedAt clientType clientCode updatedProductName listByEmployee")
+    .select("caseId name caseStatus status priority updatedAt clientType clientCode updatedProductName  accountNumber ")
     .lean();
     // console.log("data:",data)
 
@@ -461,12 +461,12 @@ async function fetchDashboardStats(query, useCache = true, role, user, clientCod
     KYC.countDocuments(query),
     KYC.countDocuments({ ...query, createdAt: { $gte: currentMonthStart } }),
     KYC.countDocuments({ ...query, caseStatus: "New Pending" }),
-    KYC.countDocuments({ ...query, status: "Pending" }),
+    KYC.countDocuments({ ...query, status: "Pending",caseStatus: "Sent", }),
     KYC.countDocuments({ ...query, priority: "Urgent" }),
     KYC.countDocuments({ ...query, status: "Closed" }),
     KYC.countDocuments({ ...query, createdAt: { $gte: todayStart, $lte: todayEnd } }),
     KYC.countDocuments({ ...query, caseStatus: "New Pending", createdAt: { $gte: todayStart, $lte: todayEnd } }),
-    KYC.countDocuments({ ...query, status: "Pending", createdAt: { $gte: todayStart, $lte: todayEnd } }),
+    KYC.countDocuments({ ...query,caseStatus: "Sent", status: "Pending", createdAt: { $gte: todayStart, $lte: todayEnd } }),
     KYC.countDocuments({ ...query, priority: "Urgent", createdAt: { $gte: todayStart, $lte: todayEnd } }),
     KYC.countDocuments({ ...query, status: "Closed", createdAt: { $gte: todayStart, $lte: todayEnd } }),
     KYC.aggregate([
