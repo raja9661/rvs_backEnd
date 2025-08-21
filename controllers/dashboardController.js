@@ -109,14 +109,15 @@ exports.getCaseDetails = async (req, res) => {
 
     // Handle today cases
     if (today) {
-      const startOfToday = moment.tz("Asia/Kolkata").startOf("day").toDate();
-const startOfTomorrow = moment.tz("Asia/Kolkata").add(1, "day").startOf("day").toDate();
+//       const startOfToday = moment.tz("Asia/Kolkata").startOf("day").toDate();
+// const startOfTomorrow = moment.tz("Asia/Kolkata").add(1, "day").startOf("day").toDate();
+const currentDate = moment().tz("Asia/Kolkata");
+query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
 
-// MongoDB query for ONLY today
-query.createdAt = { 
-  $gte: startOfToday, 
-  $lt: startOfTomorrow 
-};
+// query.createdAt = { 
+//   $gte: startOfToday, 
+//   $lt: startOfTomorrow 
+// };
     }
     
     // Apply type-specific filters
@@ -132,7 +133,7 @@ query.createdAt = {
         query.priority = 'Urgent';
         break;
       case 'totalClosed':
-        query.status = 'Closed';
+        query.status = { $in: ["Closed", "Invalid", "CNV"] };
         break;
       case 'todayNewPending':
         query.caseStatus = 'New Pending';
@@ -142,7 +143,7 @@ query.createdAt = {
          query.caseStatus = 'Sent';
         break;
       case 'todayClosed':
-        query.status = 'Closed';
+        query.status = { $in: ["Closed", "Invalid", "CNV"] };
         break;
       case 'todayHighPriority':
         query.priority = 'Urgent';
@@ -176,6 +177,7 @@ query.createdAt = {
       //   groupByField = clientCode ? '$updatedProductName' : '$clientCode';
       //   break;
       case 'todayNewPending':
+      case 'totalNewPending':  
         if(role === 'client'){
           groupByField = updatedProductName ? null : 
                   '$updatedProductName';
@@ -187,6 +189,7 @@ query.createdAt = {
     
     break;
   case 'todayPending':
+  case 'totalPending':  
     if(role === 'client'){
       groupByField = updatedProductName ? null : 
                   '$updatedProductName';
@@ -199,6 +202,8 @@ query.createdAt = {
     
     break;
       case 'todayClosed':
+      case 'totalClosed':
+      case 'totalHighPriority':    
       case 'todayHighPriority':
         if(role === 'client'){
           groupByField = updatedProductName ? null : 
@@ -390,7 +395,8 @@ query.createdAt = {
       { header: 'Client Type', key: 'clientType' },
       { header: 'Dedup By', key: 'dedupBy' },
       { header: 'IP Address', key: 'ipAddress' },
-      { header: 'Is Rechecked', key: 'isRechecked' }
+      { header: 'Is Rechecked', key: 'isRechecked' },
+      { header: 'ReferBy', key: 'ReferBy' }
     ],
     employee: [
       { header: 'S.No', key: 'serialNumber' },

@@ -43,7 +43,7 @@ const trackerSchema = new mongoose.Schema({
     isDedup: { type: Boolean, default: false },
     recheckedAt: { type: Date },
     ipAddress:{ type: String, default: "" },
-    vendorStatus:{ type: String, default: "" },
+    vendorStatus:{ type: String, default: "Pending" },
     year: { type: String }, // Add year field
     month: { type: String }, // Add month field
     role: { type: String, enum: ["admin", "employee", "client"]},
@@ -67,6 +67,7 @@ trackerSchema.index({ clientCode: 1 });
 trackerSchema.index({ updatedProductName: 1 });
 trackerSchema.index({ listByEmployee: 1 });
 trackerSchema.index({ createdAt: 1 });
+trackerSchema.index({ dateIn: 1 });
 trackerSchema.index({ year: 1, month: 1, clientCode: 1 });
 
 

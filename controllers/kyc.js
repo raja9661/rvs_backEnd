@@ -4660,10 +4660,20 @@ exports.uploadAttachment = async (req, res) => {
           { $push: { attachments: attachment } }
         );
 
+        // Generate a pre-signed URL for download
+        const command = new GetObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: file.key,
+        });
+        
+        // const downloadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour expiration
+
         uploadedAttachments.push({
-          filename: file.originalname,
-          status: 'success',
-          modifiedCount: result.modifiedCount
+          name: file.originalname,
+          key: file.key,
+          size: actualSize,
+          // downloadUrl: downloadUrl,
+          location: file.location
         });
 
       } catch (err) {
@@ -4674,7 +4684,8 @@ exports.uploadAttachment = async (req, res) => {
     const response = {
       success: errors.length === 0,
       message: `Processed ${uploadedAttachments.length} file(s) successfully`,
-      uploaded: uploadedAttachments
+      uploadedFiles: uploadedAttachments,
+      caseIds: caseIds
     };
 
     if (errors.length) {
@@ -4694,23 +4705,9 @@ exports.uploadAttachment = async (req, res) => {
   }
 };
 
-// async function verifyS3KeyExists(key) {
-//   try {
-//     const data = await s3.send(new HeadObjectCommand({
-//       Bucket: process.env.AWS_BUCKET_NAME,
-//       Key: key,
-//     }));
-//     return data.ContentLength || true;
-//   } catch (error) {
-//     console.error('S3 verification failed (object missing or inaccessible):', error.message);
-//     return null;
-//   }
-// }
-
-
 // exports.uploadAttachment = async (req, res) => {
 //   try {
-//     // 1. Parse case IDs
+//     // Parse case IDs
 //     let caseIds = Array.isArray(req.body.caseIds)
 //       ? req.body.caseIds
 //       : [req.body.caseIds].filter(Boolean);
@@ -4718,58 +4715,34 @@ exports.uploadAttachment = async (req, res) => {
 //     if (caseIds.length === 0 && typeof req.body.caseIds === 'string') {
 //       try {
 //         caseIds = JSON.parse(req.body.caseIds);
-//       } catch (e) {
+//       } catch {
 //         caseIds = req.body.caseIds.split(',').map(id => id.trim());
 //       }
 //     }
 
-//     const files = req.files; // Changed from req.file to req.files
-//     console.log("Files received:", files?.length);
-
+//     const files = req.files;
 //     if (!files || files.length === 0) {
-//       return res.status(400).json({ 
-//         success: false, 
-//         message: "No files uploaded" 
-//       });
+//       return res.status(400).json({ success: false, message: "No files uploaded" });
+//     }
+//     if (!caseIds.length) {
+//       return res.status(400).json({ success: false, message: "Invalid case IDs" });
 //     }
 
-//     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid case IDs",
-//         receivedIds: req.body.caseIds,
-//         parsedIds: caseIds
-//       });
-//     }
-
-//     // 2. Process all files
 //     const uploadedAttachments = [];
 //     const errors = [];
 
 //     for (const file of files) {
 //       try {
-//         // Verify file size and S3 upload if needed
+//         // ✅ Get actual size from S3 (even if file.size = 0 locally)
 //         let actualSize = file.size;
-//         if (file.size === 0) {
-//           const s3Size = await verifyS3KeyExists(file.key);
-//           actualSize = s3Size || 0;
+//         const s3Size = await verifyS3KeyExistsWithRetry(file.key, 3, 500);
 
-//           if (!s3Size) {
-//             errors.push({
-//               filename: file.originalname,
-//               error: "File not found in S3 after upload"
-//             });
-//             continue;
-//           }
-//         } else {
-//           const s3Verified = await verifyS3KeyExists(file.key);
-//           if (!s3Verified) {
-//             errors.push({
-//               filename: file.originalname,
-//               error: "Upload failed: File not present in S3"
-//             });
-//             continue;
-//           }
+//         if (!s3Size) {
+//           errors.push({ filename: file.originalname, error: "File not found in S3 after upload" });
+//           continue;
+//         }
+//         if (file.size === 0) {
+//           actualSize = s3Size; // Fix 0 MB issue
 //         }
 
 //         // Prepare attachment metadata
@@ -4784,7 +4757,7 @@ exports.uploadAttachment = async (req, res) => {
 //           etag: file.etag
 //         };
 
-//         // Save metadata to DB
+//         // Save to DB
 //         const result = await KYC.updateMany(
 //           { caseId: { $in: caseIds } },
 //           { $push: { attachments: attachment } }
@@ -4796,28 +4769,25 @@ exports.uploadAttachment = async (req, res) => {
 //           modifiedCount: result.modifiedCount
 //         });
 
-//       } catch (fileError) {
-//         console.error(`Error processing ${file.originalname}:`, fileError);
-//         errors.push({
-//           filename: file.originalname,
-//           error: fileError.message
-//         });
+//       } catch (err) {
+//         errors.push({ filename: file.originalname, error: err.message });
 //       }
 //     }
 
-//     // 3. Prepare response
 //     const response = {
 //       success: errors.length === 0,
 //       message: `Processed ${uploadedAttachments.length} file(s) successfully`,
-//       uploaded: uploadedAttachments
+//       uploaded: uploadedAttachments,
+//       caseIds: caseIds
+//       // uploaded: uploadedAttachments
 //     };
 
-//     if (errors.length > 0) {
+//     if (errors.length) {
 //       response.errors = errors;
 //       response.message += `, with ${errors.length} error(s)`;
 //     }
 
-//     res.status(errors.length > 0 ? 207 : 201).json(response);
+//     res.status(errors.length ? 207 : 201).json(response);
 
 //   } catch (error) {
 //     console.error("Upload error:", error);
@@ -4950,22 +4920,22 @@ exports.deleteAttachment = async (req, res) => {
     // console.log('Found attachment:', attachment);
 
     // 2. Delete from S3 if key exists
-    if (attachment.key) {
-      try {
-        // console.log(`Deleting from S3 with key: ${attachment.key}`);
-        const deleteCommand = new DeleteObjectCommand({
-          Bucket: process.env.AWS_BUCKET_NAME || 'rvsdoc',
-          Key: attachment.key
-        });
-        await s3.send(deleteCommand);
-        // console.log('Successfully deleted from S3');
-      } catch (s3Error) {
-        console.error('S3 Delete Error:', s3Error);
-        // Continue with DB deletion even if S3 deletion fails
-      }
-    } 
+    // if (attachment.key) {
+    //   try {
+    //     // console.log(`Deleting from S3 with key: ${attachment.key}`);
+    //     const deleteCommand = new DeleteObjectCommand({
+    //       Bucket: process.env.AWS_BUCKET_NAME || 'rvsdoc',
+    //       Key: attachment.key
+    //     });
+    //     await s3.send(deleteCommand);
+    //     // console.log('Successfully deleted from S3');
+    //   } catch (s3Error) {
+    //     console.error('S3 Delete Error:', s3Error);
+    //     // Continue with DB deletion even if S3 deletion fails
+    //   }
+    // } 
     // 3. Fallback to local file deletion if path exists
-    else if (attachment.path) {
+     if (attachment.path) {
       try {
         const filePath = path.resolve(attachment.path);
         if (fs.existsSync(filePath)) {
@@ -5007,7 +4977,119 @@ exports.deleteAttachment = async (req, res) => {
     });
   }
 };
+// ****************-Verify Download-*******************
 
+// Add to your backend controller
+exports.verifyFile = async (req, res) => {
+  try {
+    const { key, caseIds } = req.body;
+    
+    if (!key) {
+      return res.status(400).json({ error: "File key is required" });
+    }
+    
+    // Verify the file exists in S3
+    try {
+      const headCommand = new HeadObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: key,
+      });
+      
+      const headResult = await s3.send(headCommand);
+      
+      // Verify the file is associated with the case IDs
+      if (caseIds && caseIds.length > 0) {
+        const casesWithFile = await KYC.countDocuments({
+          caseId: { $in: caseIds },
+          'attachments.key': key
+        });
+        
+        if (casesWithFile === 0) {
+          return res.status(404).json({
+            error: "File uploaded but not associated with cases",
+            existsInS3: true,
+            associatedWithCases: false
+          });
+        }
+      }
+      
+      // Generate a pre-signed URL for download
+      const command = new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: key,
+      });
+      
+      const url = await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour expiration
+      
+      res.json({
+        exists: true,
+        key: key,
+        size: headResult.ContentLength,
+        lastModified: headResult.LastModified,
+        url: url,
+        associatedWithCases: caseIds ? true : undefined
+      });
+    } catch (error) {
+      if (error.name === 'NotFound' || error.name === 'NoSuchKey') {
+        res.status(404).json({
+          exists: false,
+          key: key,
+          error: "File not found in S3"
+        });
+      } else if (error.name === 'AccessDenied') {
+        res.status(403).json({
+          exists: false,
+          key: key,
+          error: "Access denied to file"
+        });
+      } else {
+        throw error;
+      }
+    }
+  } catch (error) {
+    console.error("File verification error:", error);
+    res.status(500).json({
+      error: "Failed to verify file",
+      message: error.message
+    });
+  }
+};
+
+// Add a download endpoint that handles authorization properly
+exports.downloadFile = async (req, res) => {
+  try {
+    const { key } = req.query;
+    
+    if (!key) {
+      return res.status(400).json({ error: "File key is required" });
+    }
+    
+    // Verify the user has access to this file
+    // You might want to add additional authorization checks here
+    
+    const command = new GetObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: key,
+    });
+    
+    const { Body, ContentType } = await s3.send(command);
+    
+    // Set appropriate headers
+    res.setHeader('Content-Type', ContentType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${key.split('/').pop()}"`);
+    
+    // Stream the file
+    Body.pipe(res);
+  } catch (error) {
+    console.error("File download error:", error);
+    
+    if (error.name === 'NoSuchKey') {
+      return res.status(404).json({ error: "File not found" });
+    }
+    
+    res.status(500).json({ error: "Download failed", message: error.message });
+  }
+};
 /////////////////--Deduce---///////////////////////
 
 // exports.similarRecords = async (req,res) => {
