@@ -43,7 +43,7 @@ const trackerSchema = new mongoose.Schema({
     isDedup: { type: Boolean, default: false },
     recheckedAt: { type: Date },
     ipAddress:{ type: String, default: "" },
-    vendorStatus:{ type: String, default: "Pending" },
+    vendorStatus:{ type: String, default: "" },
     year: { type: String }, // Add year field
     month: { type: String }, // Add month field
     role: { type: String, enum: ["admin", "employee", "client"]},

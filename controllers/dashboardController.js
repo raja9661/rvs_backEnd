@@ -91,6 +91,11 @@ exports.getCaseDetails = async (req, res) => {
     const { type, year, month, clientType, clientCode, updatedProductName, vendorName, today, download } = req.query;
     const { role, user, code } = req.body.requestBody;
     const userClientCode = code;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    
     
     // Base query with role enforcement
     let query = {};
@@ -241,6 +246,8 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
       }
         
     }
+
+    
 
     // For non-download requests, use aggregation for counts
     if (!download) {

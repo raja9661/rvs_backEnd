@@ -2071,6 +2071,7 @@ exports.getTrackerData = async (req, res) => {
       vendorStatus,
       priority,
       clientType,
+      clientCode,
        ...filters
     } = req.query;
     
@@ -2163,6 +2164,7 @@ exports.getTrackerData = async (req, res) => {
     if (caseStatus) query.caseStatus = caseStatus;
     if (vendorStatus) query.vendorStatus = vendorStatus;
     if (priority) query.priority = priority;
+    if (clientCode) query.clientCode = clientCode;
     if (clientType) query.clientType = clientType;
 
 // Enhanced date filtering with debugging
