@@ -447,7 +447,7 @@ async function getRecentActivity(query = {}, limit = 20, role, user, clientCode)
   })
     .sort({ updatedAt: -1 })
     .limit(limit)
-    .select("caseId name caseStatus status priority updatedAt clientType clientCode updatedProductName accountNumber")
+    .select("caseId name caseStatus status priority updatedAt clientType clientCode product accountNumber")
     .lean();
 
   return data;

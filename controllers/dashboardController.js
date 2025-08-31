@@ -169,7 +169,7 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
     // Apply hierarchy filters
     if (clientType) query.clientType = clientType;
     if (clientCode) query.clientCode = clientCode;
-    if (updatedProductName) query.updatedProductName = updatedProductName;
+    if (updatedProductName) query.product = updatedProductName;
     if (vendorName) query.vendorName = vendorName;
 
     // Determine grouping field based on type and hierarchy level
@@ -185,11 +185,11 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
       case 'totalNewPending':  
         if(role === 'client'){
           groupByField = updatedProductName ? null : 
-                  '$updatedProductName';
+                  '$product';
         }else{
           groupByField = clientCode ? null : 
                   updatedProductName ? '$clientCode' : 
-                  '$updatedProductName';
+                  '$product';
         }
     
     break;
@@ -197,11 +197,11 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
   case 'totalPending':  
     if(role === 'client'){
       groupByField = updatedProductName ? null : 
-                  '$updatedProductName';
+                  '$product';
     }else{
       groupByField = vendorName ? null : 
                   updatedProductName ? '$vendorName' : 
-                  '$updatedProductName';
+                  '$product';
 
     }
     
@@ -212,10 +212,10 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
       case 'todayHighPriority':
         if(role === 'client'){
           groupByField = updatedProductName ? null : 
-                  '$updatedProductName';
+                  '$product';
         }else{
         groupByField = updatedProductName ? null : 
-                      clientCode ? '$updatedProductName' : 
+                      clientCode ? '$product' : 
                       clientType ? '$clientCode' : 
                       '$clientType';}
         break;
@@ -223,22 +223,22 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
       case 'today':
         if(role === 'client'){
           groupByField = updatedProductName ? null : 
-                  '$updatedProductName';
+                  '$product';
         }else{
         groupByField = updatedProductName ? null : 
-                      clientCode ? '$updatedProductName' : 
+                      clientCode ? '$product' : 
                       clientType ? '$clientCode' : 
                       '$clientType';}
         break;
       default: // total cases and other totals
       if(role === 'client'){
         groupByField = updatedProductName ? null : 
-                      month ? '$updatedProductName' :
+                      month ? '$product' :
                       year ? '$month' :
                       '$year';
       }else{
         groupByField = updatedProductName ? null : 
-                      clientCode ? '$updatedProductName' : 
+                      clientCode ? '$product' : 
                       clientType ? '$clientCode' : 
                       month ? '$clientType' :
                       year ? '$month' :
