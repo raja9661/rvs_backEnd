@@ -68,6 +68,9 @@ trackerSchema.index({ updatedProductName: 1 });
 trackerSchema.index({ listByEmployee: 1 });
 trackerSchema.index({ createdAt: 1 });
 trackerSchema.index({ dateIn: 1 });
+trackerSchema.index({ accountNumber: 1 });
+trackerSchema.index({ product: 1 });
+trackerSchema.index({ requirement: 1 });
 trackerSchema.index({ year: 1, month: 1, clientCode: 1 });
 
 

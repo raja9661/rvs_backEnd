@@ -8,6 +8,13 @@ const productSchema = new mongoose.Schema({
   productType: { type: String, required: true },
 }, { timestamps: true });
 
+
+const revisedProductSchema = new mongoose.Schema({
+  productName: { type: String, required: true },
+  correctUPN: { type: String, required: true },
+  productType: { type: String, required: true },
+}, { timestamps: true });
+
 // Client Code Schema
 const clientCodeSchema = new mongoose.Schema({
   EmployeeName: { type: String, required: true },
@@ -21,11 +28,7 @@ const ManageclientCode = new mongoose.Schema({
   clientType: { type: String,required: true },
 }, { timestamps: true });
 
-// Vendor Product Schema
-// const defaultVendorSchema = new mongoose.Schema({
-//   productName: [{ type: String, required: true }], // Array of product names
-//   vendorName: { type: String, required: true }
-// }, { timestamps: true });
+
 
 const defaultVendorSchema = new mongoose.Schema({
   productName: [{ type: String, required: true }],
@@ -38,10 +41,24 @@ const defaultVendorSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+
+const vendorSchema = new mongoose.Schema({
+  productName: [{ type: String, required: true }],
+  vendorName: { type: String, required: true },
+  vendorType: { 
+    type: String, 
+    required: true,
+    enum: ['default', 'other'],
+    default: 'other'
+  }
+}, { timestamps: true });
+
 // Export all models
 module.exports = {
+  RevisedProduct: mongoose.model('RevisedProducts', revisedProductSchema),
   Product: mongoose.model('Product', productSchema),
   ClientCode: mongoose.model('ClientCode', clientCodeSchema),
   Vendor: mongoose.model('VendorProduct', defaultVendorSchema),
+  Allvendors: mongoose.model('Allvendors', vendorSchema),
   ManageClientCode:mongoose.model('ManageClientCode', ManageclientCode),
 };

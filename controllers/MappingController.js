@@ -1,7 +1,83 @@
-const {Product,ClientCode,Vendor,ManageClientCode} = require('../models/MappingItems');
+const {RevisedProduct,Product,ClientCode,Vendor,ManageClientCode,Allvendors} = require('../models/MappingItems');
 const User = require("../models/users");
 const KYCdoc = require('../models/kycModel');
 ////////////////////****** Client code Management*/////////////////////////////////
+
+exports.addDefaultVendors = async (req, res) => {
+  try {
+    const records = req.body.records; // array of objects
+
+    if (!Array.isArray(records)) {
+      return res.status(400).json({ message: "Records must be an array" });
+    }
+
+    // convert productName into array if it's string
+    const formattedRecords = records.map(r => ({
+      productName: Array.isArray(r.productName) ? r.productName : [r.productName],
+      vendorName: r.vendorName,
+      vendorType: r.vendorType || "default"
+    }));
+
+    const inserted = await Allvendors.insertMany(formattedRecords, { ordered: false });
+
+    return res.status(201).json({
+      message: "Records inserted successfully",
+      count: inserted.length,
+      data: inserted
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Error inserting records", error: error.message });
+  }
+};
+
+// Add multiple unique products at once
+exports.addProducts = async (req, res) => {
+  try {
+    const products = req.body.products; // Expecting an array of products
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ message: "No products provided" });
+    }
+
+    // Remove duplicates from input (by productName + correctUPN + productType)
+    const uniqueProducts = [];
+    const seen = new Set();
+
+    for (const p of products) {
+      const key = `${p.productName}|${p.correctUPN}|${p.productType}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueProducts.push(p);
+      }
+    }
+
+    // Check for existing products in DB to avoid duplicates
+    const bulkOps = [];
+    for (const p of uniqueProducts) {
+      bulkOps.push({
+        updateOne: {
+          filter: {
+            productName: p.productName,
+            correctUPN: p.correctUPN,
+            productType: p.productType,
+          },
+          update: { $setOnInsert: p },
+          upsert: true,
+        },
+      });
+    }
+
+    if (bulkOps.length > 0) {
+      await RevisedProduct.bulkWrite(bulkOps);
+    }
+
+    res.status(201).json({ message: "Products inserted successfully" });
+  } catch (error) {
+    console.error("Error inserting products:", error);
+    res.status(500).json({ message: "Server error", error });
+  }
+};
+
 
 // Add new client code with type
 exports.addClientCodeandType = async (req, res) => {
@@ -72,14 +148,13 @@ exports.getColumns = (req, res) => {
 
 // Add a single product
 exports.addSingle = async (req, res) => {
-  const { productName, updatedProduct, correctUPN, productType, clientType, clientCode } = req.body;
+  const { productName,  correctUPN, productType, clientType, clientCode } = req.body;
   // console.log("hello")
 
   try {
     // Check if the product already exists
     const existingProduct = await Product.findOne({
       productName,
-      updatedProduct,
       correctUPN,
       productType,
     });
@@ -89,9 +164,8 @@ exports.addSingle = async (req, res) => {
     }
 
     // Create a new product
-    const newProduct = new Product({
+    const newProduct = new RevisedProduct({
       productName,
-      updatedProduct,
       correctUPN,
       productType,
     });
@@ -159,7 +233,6 @@ exports.getProducts = async (req, res) => {
       const query = {
         $or: [
           { productName: { $regex: search, $options: 'i' } },
-          { updatedProduct: { $regex: search, $options: 'i' } },
           { correctUPN: { $regex: search, $options: 'i' } },
           { productType: { $regex: search, $options: 'i' } },
           { clientType: { $regex: search, $options: 'i' } },
@@ -167,12 +240,12 @@ exports.getProducts = async (req, res) => {
         ],
       };
   
-      const products = await Product.find(query)
+      const products = await RevisedProduct.find(query).sort({ _id: -1 })
         .limit(limit * 1)
         .skip((page - 1) * limit)
         .exec();
   
-      const count = await Product.countDocuments(query);
+      const count = await RevisedProduct.countDocuments(query);
   
       res.status(200).json({
         products,
@@ -187,12 +260,12 @@ exports.getProducts = async (req, res) => {
 // Edit a product
 exports.editProduct =  async (req, res) => {
     const { id } = req.params;
-    const { productName, updatedProduct, correctUPN, productType, clientType, clientCode } = req.body;
+    const { productName,  correctUPN, productType, clientType, clientCode } = req.body;
   
     try {
-      const updatedProductData = await Product.findByIdAndUpdate(
+      const updatedProductData = await RevisedProduct.findByIdAndUpdate(
         id,
-        { productName, updatedProduct, correctUPN, productType, clientType, clientCode },
+        { productName,  correctUPN, productType, clientType, clientCode },
         { new: true } // Return the updated product
       );
   
@@ -212,7 +285,7 @@ exports.editProduct =  async (req, res) => {
     // console.log(id);
   
     try {
-      const deletedProduct = await Product.findByIdAndDelete(id);
+      const deletedProduct = await RevisedProduct.findByIdAndDelete(id);
   
       if (!deletedProduct) {
         return res.status(404).json({ message: 'Product not found' });
@@ -418,12 +491,12 @@ exports.getVendorsByType = async (req, res) => {
             vendorName: { $regex: search, $options: 'i' } // case-insensitive search
         };
 
-        const vendors = await Vendor.find(query)
+        const vendors = await Allvendors.find(query)
             .limit(limit * 1)
             .skip((page - 1) * limit)
             .exec();
 
-        const count = await Vendor.countDocuments(query);
+        const count = await Allvendors.countDocuments(query);
 
         res.json({
             vendors,
@@ -446,12 +519,12 @@ exports.getAllVendors = async (req, res) => {
       ]
     };
     
-    const vendors = await Vendor.find(query)
+    const vendors = await Allvendors.find(query)
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .exec();
 
-    const count = await Vendor.countDocuments(query);
+    const count = await Allvendors.countDocuments(query);
 
     res.json({
       vendors,
@@ -474,7 +547,7 @@ exports.getVendors = async (req, res) => {
 
 exports.getProductsforvandor = async (req, res) => {
     try {
-        const product = await Product.distinct("productName");
+        const product = await Allvendors.distinct("productName");
         res.json(product);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -521,7 +594,7 @@ exports.addVendorProducts = async (req, res) => {
 
     // Only check product conflicts when vendorType is 'default'
     if (vendorType === 'default') {
-      const existingProducts = await Vendor.find({
+      const existingProducts = await Allvendors.find({
         productName: { $in: products } , vendorType:"default"
       });
 
@@ -551,7 +624,7 @@ exports.addVendorProducts = async (req, res) => {
     }
 
     // Always check if vendor with same name+type exists (regardless of vendorType)
-    const existingVendor = await Vendor.findOne({ 
+    const existingVendor = await Allvendors.findOne({ 
       vendorName, 
       vendorType 
     });
@@ -579,7 +652,7 @@ exports.addVendorProducts = async (req, res) => {
     }
 
     // Create new vendor
-    const newVendor = new Vendor({ 
+    const newVendor = new Allvendors({ 
       vendorName, 
       productName: products, // All products are new (for default) or unchecked (for others)
       vendorType 
@@ -669,12 +742,12 @@ exports.addVendorProducts = async (req, res) => {
 exports.getVendorProducts = async (req, res) => {
     const { page = 1, limit = 10, search = '' } = req.query;
     try {
-        const vendorProducts = await Vendor.find({ vendorName: { $regex: search, $options: 'i' } })
+        const vendorProducts = await Allvendors.find({ vendorName: { $regex: search, $options: 'i' } })
             .limit(limit * 1)
             .skip((page - 1) * limit)
             .exec();
 
-        const count = await Vendor.countDocuments({ vendorName: { $regex: search, $options: 'i' } });
+        const count = await Allvendors.countDocuments({ vendorName: { $regex: search, $options: 'i' } });
 
         res.json({
             vendorProducts,
@@ -688,7 +761,7 @@ exports.getVendorProducts = async (req, res) => {
 exports.getVendorName = async (req, res) => {
    
     try {
-        const vendorName = await Vendor.find({});
+        const vendorName = await Allvendors.find({});
         res.json({
             vendorName
         });
@@ -702,7 +775,7 @@ exports.updateVendorProducts = async (req, res) => {
     const { id } = req.params;
     const { vendorName, products,vendorType } = req.body;
     try {
-        const updatedVendorProduct = await Vendor.findByIdAndUpdate(
+        const updatedVendorProduct = await Allvendors.findByIdAndUpdate(
             id,
             { vendorName, productName:products,vendorType },
             { new: true }
@@ -720,7 +793,7 @@ exports.removeProductFromVendor = async (req, res) => {
 
     try {
         // Find the vendor by ID
-        const vendor = await Vendor.findById(vendorId);
+        const vendor = await Allvendors.findById(vendorId);
 
         if (!vendor) {
             return res.status(404).json({ message: "Vendor not found." });
@@ -742,7 +815,7 @@ exports.removeProductFromVendor = async (req, res) => {
 exports.deleteVendorProducts = async (req, res) => {
     const { id } = req.params;
     try {
-        await Vendor.findByIdAndDelete(id);
+        await Allvendors.findByIdAndDelete(id);
         res.json({ message: 'Vendor-Product combination deleted successfully' });
     } catch (err) {
         res.status(400).json({ message: err.message });

@@ -24,7 +24,9 @@ const {
     getColumns,
     addClientCodeandType,
     getAllClientCodes,
-    deleteClientCode
+    deleteClientCode,
+    addProducts,
+    addDefaultVendors
 } = require("../controllers/MappingController")
 
 
@@ -40,6 +42,9 @@ router.get("/clientCodes", getClientCodes);
 router.get("/Empcode", getAllemployeeNandCcode);
 router.post("/addClientCode",addClientCode);
 router.delete("/removeClientCode",removeClientCode);
+
+router.post("/push", addProducts);
+router.post("/addnew", addDefaultVendors);
 
 router.get("/getVendors",getVendors)
 router.get("/getAllVendors",getAllVendors)
