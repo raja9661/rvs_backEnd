@@ -149,11 +149,10 @@ exports.getColumns = (req, res) => {
 // Add a single product
 exports.addSingle = async (req, res) => {
   const { productName,  correctUPN, productType, clientType, clientCode } = req.body;
-  // console.log("hello")
 
   try {
     // Check if the product already exists
-    const existingProduct = await Product.findOne({
+    const existingProduct = await RevisedProduct.findOne({
       productName,
       correctUPN,
       productType,
@@ -491,7 +490,7 @@ exports.getVendorsByType = async (req, res) => {
             vendorName: { $regex: search, $options: 'i' } // case-insensitive search
         };
 
-        const vendors = await Allvendors.find(query)
+        const vendors = await Allvendors.find(query).sort({ _id: -1 })
             .limit(limit * 1)
             .skip((page - 1) * limit)
             .exec();
@@ -519,7 +518,7 @@ exports.getAllVendors = async (req, res) => {
       ]
     };
     
-    const vendors = await Allvendors.find(query)
+    const vendors = await Allvendors.find(query).sort({ _id: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .exec();
@@ -761,7 +760,7 @@ exports.getVendorProducts = async (req, res) => {
 exports.getVendorName = async (req, res) => {
    
     try {
-        const vendorName = await Allvendors.find({});
+        const vendorName = await Allvendors.distinct("vendorName");
         res.json({
             vendorName
         });
