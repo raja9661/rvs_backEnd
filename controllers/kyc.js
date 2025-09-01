@@ -701,6 +701,7 @@ exports.singleUpload = async (req, res) => {
 exports.bulkUpload = async (req, res) => {
   try {
     const { data } = req.body;
+    // console.log("req.body",req.body)
 
     if (!data || !Array.isArray(data) || data.length === 0) {
       return res.status(400).json({
@@ -725,10 +726,21 @@ exports.bulkUpload = async (req, res) => {
     const clientCodeSet = new Set();
 
     // STEP 1: Collect IDs for preloading
-    for (const row of data) {
-      if (row.userId) uniqueUserIds.add(row.userId.trim());
-      if (row.clientId) clientCodeSet.add(row.clientId.trim());
+    // STEP 1: Collect IDs for preloading
+for (const row of data) {
+  if (row.userId) uniqueUserIds.add(row.userId.trim());
+
+  if (row.clientId) {
+    clientCodeSet.add(row.clientId.trim());  // Admin uploads
+  } else if (row.userId) {
+    // Fallback: resolve clientCode later from userId (client uploads)
+    const user = await User.findOne({ userId: row.userId.trim() }).lean();
+    if (user?.clientCode) {
+      clientCodeSet.add(user.clientCode.trim());
     }
+  }
+}
+
 
     // STEP 2: Preload users
     const users = await User.find({
@@ -842,23 +854,42 @@ allEmployees.forEach(e => { empPhoneMap[e.name] = e.phoneNumber; });
         continue;
       }
 
+
       // Resolve clientCode
+
       let resolvedClientCode = "";
-      if (userId && clientId) {
-        if (!clientCodeUserMap[clientId]) {
-          results.failed++;
-          results.failedRecords.push({ ...row, error: `No user found with client code ${clientId}` });
-          continue;
-        }
-        resolvedClientCode = clientId;
-      } else if (userId && !clientId) {
-        if (!userIdMap[userId]) {
-          results.failed++;
-          results.failedRecords.push({ ...row, error: `No user found with userId ${userId}` });
-          continue;
-        }
-        resolvedClientCode = userIdMap[userId].clientCode;
-      }
+if (userId && clientId) {
+  if (!clientCodeUserMap[clientId]) {
+    results.failed++;
+    results.failedRecords.push({ ...row, error: `No user found with client code ${clientId}` });
+    continue;
+  }
+  resolvedClientCode = clientId;
+} else if (userId && !clientId) {
+  if (!userIdMap[userId]) {
+    results.failed++;
+    results.failedRecords.push({ ...row, error: `No user found with userId ${userId}` });
+    continue;
+  }
+  resolvedClientCode = userIdMap[userId].clientCode;   // ✅ fallback
+}
+
+      // let resolvedClientCode = "";
+      // if (userId && clientId) {
+      //   if (!clientCodeUserMap[clientId]) {
+      //     results.failed++;
+      //     results.failedRecords.push({ ...row, error: `No user found with client code ${clientId}` });
+      //     continue;
+      //   }
+      //   resolvedClientCode = clientId;
+      // } else if (userId && !clientId) {
+      //   if (!userIdMap[userId]) {
+      //     results.failed++;
+      //     results.failedRecords.push({ ...row, error: `No user found with userId ${userId}` });
+      //     continue;
+      //   }
+      //   resolvedClientCode = userIdMap[userId].clientCode;
+      // }
 
       // Check file-level duplicate
       const fileKey = `${accountNumber}-${product}-${requirement}-${resolvedClientCode}`;
