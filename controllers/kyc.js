@@ -5024,7 +5024,7 @@ exports.copyPasteDedup = async (req, res) => {
       details1:sourceRecordToCopy.details1,
       status: "Closed",
       caseStatus: "Sent",
-      vendorName: userName,
+      vendorName: "NAWSHAD",
       sentDate: getFormattedDateTime(),
       sentDateInDay: getFormattedDateDay(),
       dateOut: getFormattedDateTime(),
