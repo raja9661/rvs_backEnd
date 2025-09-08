@@ -1,16 +1,4 @@
-// const parseCustomDateTime = (dateStr) => {
-//   if (!dateStr) return null;
-  
-//   // Already a Date object
-//   if (dateStr instanceof Date) {
-//     return isNaN(dateStr.getTime()) ? null : dateStr;
-//   }
 
-//   // Handle ISO format
-//   if (dateStr.includes('T')) {
-//     const date = new Date(dateStr);
-//     return isNaN(date.getTime()) ? null : date;
-//   }
 
 //   // Handle "dd-mm-yyyy, h:mm:ss am/pm" format
 //   try {
