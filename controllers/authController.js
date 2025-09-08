@@ -283,6 +283,60 @@ exports.verify = async (req, res) => {
   }
 };
 
+// Add this to your backend auth routes
+exports.adminLoginAsUser = async (req, res) => {
+  try {
+    // Verify the requesting user is an admin
+    const adminToken = req.headers.authorization?.replace('Bearer ', '');
+    if (!adminToken) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+
+    const decodedAdmin = jwt.verify(adminToken, process.env.JWT_SECRET);
+    // console.log("decodedAdmin:",decodedAdmin)
+    const adminUser = await User.findOne({userId:decodedAdmin.id});
+    // console.log("adminUser:",)
+    
+    if (!adminUser || !['admin', 'root'].includes(adminUser.role)) {
+      return res.status(403).json({ message: "Admin privileges required" });
+    }
+
+    // Get the target user ID
+    const { userId } = req.body;
+    // console.log("userId:",userId)
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    // Find the target user
+    const targetUser = await User.findOne({userId});
+    // console.log("targetUser:",targetUser)
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Generate a token for the target user
+    const token = jwt.sign(
+      { id: targetUser._id, role: targetUser.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" } // Short expiration for security
+    );
+
+    res.json({
+      message: "Login successful",
+      token,
+      user: targetUser
+    });
+
+  } catch (error) {
+    console.error("Admin login-as error:", error);
+    res.status(500).json({ 
+      message: "Error processing request",
+      error: error.message
+    });
+  }
+};
+
 ///////////******-User Management-*****////////////////
 
 // Get all users with pagination and search

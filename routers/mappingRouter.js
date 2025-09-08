@@ -26,11 +26,26 @@ const {
     getAllClientCodes,
     deleteClientCode,
     addProducts,
-    addDefaultVendors
+    addDefaultVendors,
+    getClientTrackerSummary,
+    getUserCases,
+    downloadUserCasesExcel
+
+    
 } = require("../controllers/MappingController")
 
 
 const router = express.Router();
+// ******** Client-Management ***************************
+
+
+router.get('/summary', getClientTrackerSummary);
+router.get('/cases', getUserCases);
+router.get('/download', downloadUserCasesExcel);
+
+
+
+
 router.get('/columns', getColumns);
 router.post("/add", addSingle);
 router.post("/add-multiple", addMultiple);

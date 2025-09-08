@@ -1,6 +1,7 @@
 const {RevisedProduct,Product,ClientCode,Vendor,ManageClientCode,Allvendors} = require('../models/MappingItems');
 const User = require("../models/users");
 const KYCdoc = require('../models/kycModel');
+const ExcelJS = require('exceljs');
 ////////////////////****** Client code Management*/////////////////////////////////
 
 exports.addDefaultVendors = async (req, res) => {
@@ -820,3 +821,213 @@ exports.deleteVendorProducts = async (req, res) => {
         res.status(400).json({ message: err.message });
     }
 };
+
+// ************ Client-Management **********************
+
+// helper to build match object from query
+function buildMatch(query) {
+  const match = {};
+  const { year, month, clientCode, userId, product, status } = query;
+  if (year) match.year = String(year);
+  if (month) match.month = String(month);
+  if (clientCode) match.clientCode = String(clientCode);
+  if (userId) match.userId = String(userId);
+  if (product) match.product = String(product);
+  if (status) match.status = String(status);
+  return match;
+}
+
+// GET /api/client-tracker/summary
+// Group by userId + clientCode, compute totals & completionRate (rounded to 3 decimals)
+exports.getClientTrackerSummary = async (req, res) => {
+  try {
+    const match = buildMatch(req.query);
+    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 500);
+    const skip = (page - 1) * limit;
+
+    const pipeline = [
+      { $match: match },
+      {
+        $group: {
+          _id: { userId: '$userId', clientCode: '$clientCode' },
+          total: { $sum: 1 },
+          totalClosed: {
+            $sum: {
+              $cond: [
+                {
+                  $in: [
+                    { $toLower: { $ifNull: ['$status', ''] } },
+                    ['closed', 'complete', 'completed', 'done']
+                  ]
+                },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          userId: '$_id.userId',
+          clientCode: '$_id.clientCode',
+          total: 1,
+          totalClosed: 1,
+          completionRate: {
+            $cond: [
+              { $gt: ['$total', 0] },
+              { $round: [{ $multiply: [{ $divide: ['$totalClosed', '$total'] }, 100] }, 3] },
+              0
+            ]
+          }
+        }
+      },
+      { $sort: { userId: 1, clientCode: 1 } },
+      {
+        $facet: {
+          data: [{ $skip: skip }, { $limit: limit }],
+          meta: [{ $count: 'totalGroups' }]
+        }
+      }
+    ];
+
+    const result = await KYCdoc.aggregate(pipeline);
+    const data = result[0]?.data || [];
+    const totalGroups = result[0]?.meta?.[0]?.totalGroups || 0;
+
+    return res.json({ page, limit, totalGroups, data });
+  } catch (err) {
+    console.error('getClientTrackerSummary error:', err);
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// GET /api/client-tracker/cases?userId=...&clientCode=...&page=1&limit=50
+exports.getUserCases = async (req, res) => {
+  try {
+    console.log("hello")
+    const { userId, clientCode } = req.query;
+    if (!userId) return res.status(400).json({ message: 'userId is required' });
+
+    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || '50', 10), 1), 1000);
+    const skip = (page - 1) * limit;
+
+    const find = { userId: String(userId) };
+    if (clientCode) find.clientCode = String(clientCode);
+
+    const [items, count] = await Promise.all([
+      KYCdoc.find(find)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select({
+          caseId: 1,
+          product: 1,
+          correctUPN: 1,
+          updatedProductName: 1,
+          status: 1,
+          caseStatus: 1,
+          listByEmployee: 1,
+          vendorStatus: 1,
+          clientCode: 1,
+          userId: 1,
+          accountNumber: 1,
+          requirement: 1,
+          dateIn: 1,
+          dateOut: 1,
+          sentBy: 1,
+          vendorName: 1,
+          attachments: 1,
+          createdAt: 1
+        })
+        .lean(),
+      KYCdoc.countDocuments(find)
+    ]);
+
+    return res.json({ page, limit, total: count, items });
+  } catch (err) {
+    console.error('getUserCases error:', err);
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+
+// GET /api/client-tracker/download?userId=...&clientCode=...
+exports.downloadUserCasesExcel = async (req, res) => {
+  try {
+    const { userId, clientCode } = req.query;
+    if (!userId) return res.status(400).json({ message: 'userId is required' });
+
+    const find = { userId: String(userId) };
+    if (clientCode) find.clientCode = String(clientCode);
+
+    const cursor = KYCdoc.find(find).sort({ createdAt: -1 }).lean().cursor();
+
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+      stream: res,
+      useStyles: true,
+      useSharedStrings: true
+    });
+
+    const worksheet = workbook.addWorksheet('Cases');
+
+    worksheet.columns = [
+      { header: 'User ID', key: 'userId', width: 18 },
+      { header: 'Client Code', key: 'clientCode', width: 16 },
+      { header: 'Case ID', key: 'caseId', width: 18 },
+      { header: 'Product', key: 'product', width: 20 },
+      { header: 'Updated Product', key: 'updatedProductName', width: 22 },
+      { header: 'Correct UPN', key: 'correctUPN', width: 18 },
+      { header: 'Status', key: 'status', width: 14 },
+      { header: 'Case Status', key: 'caseStatus', width: 18 },
+      { header: 'List Of Employee', key: 'listByEmployee', width: 20 },
+      { header: 'Vendor Status', key: 'vendorStatus', width: 18 },
+      { header: 'Vendor Name', key: 'vendorName', width: 18 },
+      { header: 'Requirement', key: 'requirement', width: 24 },
+      { header: 'Account Number', key: 'accountNumber', width: 20 },
+      { header: 'Date In', key: 'dateIn', width: 16 },
+      { header: 'Date Out', key: 'dateOut', width: 16 },
+      { header: 'Sent By', key: 'sentBy', width: 16 },
+      { header: 'Created At', key: 'createdAt', width: 22 }
+    ];
+
+    const fileName = `cases_${userId}${clientCode ? `_${clientCode}` : ''}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    for await (const r of cursor) {
+      worksheet.addRow({
+        userId: r.userId || '',
+        clientCode: r.clientCode || '',
+        caseId: r.caseId || '',
+        product: r.product || '',
+        updatedProductName: r.updatedProductName || '',
+        correctUPN: r.correctUPN || '',
+        status: r.status || '',
+        caseStatus: r.caseStatus || '',
+        listByEmployee: r.listByEmployee || '',
+        vendorStatus: r.vendorStatus || '',
+        vendorName: r.vendorName || '',
+        requirement: r.requirement || '',
+        accountNumber: r.accountNumber || '',
+        dateIn: r.dateIn || '',
+        dateOut: r.dateOut || '',
+        sentBy: r.sentBy || '',
+        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : ''
+      }).commit();
+    }
+
+    worksheet.commit();
+    await workbook.commit(); // closes the stream
+  } catch (err) {
+    console.error('downloadUserCasesExcel error:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ message: 'Server error', error: err.message });
+    }
+  }
+};
+

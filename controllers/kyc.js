@@ -1513,83 +1513,150 @@ exports.getTrackerData = async (req, res) => {
     if (clientType) query.clientType = clientType;
 
 // Enhanced date filtering with debugging
- if (dateInStart || dateInEnd) {
-      if (dateInStart && dateInEnd) {
-        // RANGE QUERY - handle as string comparison
-        const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
-        const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
-        
-        if (startDate === endDate) {
-          // Single day
-          query.dateIn = { $regex: `^${startDate}` };
-        } else {
-          // Date range - compare as strings
-          query.$and = [
-            { 
-              dateIn: { 
-                $gte: `${startDate}, 00:00:00 AM`,
-                $lte: `${endDate}, 11:59:59 PM`
-              }
-            }
-          ];
-        }
-      }
-      else if (dateInStart) {
-        // Single start date
-        const dateStr = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
-        query.dateIn = { $regex: `^${dateStr}` };
-      }
-      else if (dateInEnd) {
-        // Single end date
-        const dateStr = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
-        query.dateIn = { $lte: `${dateStr}, 11:59:59 PM` };
-      }
-    }
+// Enhanced dateIn filtering
+if (dateInStart || dateInEnd) {
+  const dateInFilter = {};
+  
+  const startDateStr = dateInStart ? moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+  const endDateStr = dateInEnd ? moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
 
-    // DATE OUT FILTER (same logic)
-    if (dateOutStart || dateOutEnd) {
-  // Initialize dateOut filter object
+  if (startDateStr && endDateStr) {
+    if (startDateStr === endDateStr) {
+      dateInFilter.$regex = `^${startDateStr}`;
+    } else {
+      // For range queries, use regex to match the date part only
+      dateInFilter.$regex = new RegExp(`^(${generateDateRangeRegex(startDateStr, endDateStr)})`);
+    }
+  } else if (startDateStr) {
+    dateInFilter.$regex = `^${startDateStr}`;
+  } else if (endDateStr) {
+    dateInFilter.$regex = new RegExp(`^(${generateDateRangeRegex('01-01-2000', endDateStr)})`);
+  }
+
+  if (Object.keys(dateInFilter).length > 0) {
+    query.dateIn = dateInFilter;
+  }
+}
+
+// Enhanced dateOut filtering
+if (dateOutStart || dateOutEnd) {
   const dateOutFilter = {};
   
-  // Format dates consistently
   const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
   const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
 
-  // Case 1: Both start and end dates provided
   if (startDateStr && endDateStr) {
     if (startDateStr === endDateStr) {
-      // Single day match - use regex for exact day
       dateOutFilter.$regex = `^${startDateStr}`;
     } else {
-      // Date range - use string comparison
-      dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
-      dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+      // For range queries, use regex to match the date part only
+      dateOutFilter.$regex = new RegExp(`^(${generateDateRangeRegex(startDateStr, endDateStr)})`);
     }
-  }
-  // Case 2: Only start date provided
-  else if (startDateStr) {
+  } else if (startDateStr) {
     dateOutFilter.$regex = `^${startDateStr}`;
-  }
-  // Case 3: Only end date provided
-  else if (endDateStr) {
-    dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+  } else if (endDateStr) {
+    dateOutFilter.$regex = new RegExp(`^(${generateDateRangeRegex('01-01-2000', endDateStr)})`);
   }
 
-  // Only apply the filter if we have valid conditions
   if (Object.keys(dateOutFilter).length > 0) {
-    // Exclude empty dateOut values and apply the filter
     query.dateOut = {
       ...dateOutFilter,
-      $ne: "", // Exclude empty values
-      $exists: true // Ensure field exists
+      $ne: "",
+      $exists: true
     };
-
-    // For range queries, we need to ensure we don't match invalid date strings
-    if (dateOutFilter.$gte || dateOutFilter.$lte) {
-      query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
-    }
   }
 }
+
+// Helper function to generate regex for date range
+function generateDateRangeRegex(startDate, endDate) {
+  const start = moment(startDate, "DD-MM-YYYY");
+  const end = moment(endDate, "DD-MM-YYYY");
+  const dates = [];
+  
+  let current = start.clone();
+  while (current <= end) {
+    dates.push(current.format("DD-MM-YYYY"));
+    current.add(1, 'day');
+  }
+  
+  return dates.join("|");
+}
+//  if (dateInStart || dateInEnd) {
+//       if (dateInStart && dateInEnd) {
+//         // RANGE QUERY - handle as string comparison
+//         const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+//         const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+        
+//         if (startDate === endDate) {
+//           query.dateIn = { $regex: `^${startDate}` };
+//         } else {
+          
+//           query.$and = [
+//             { 
+//               dateIn: { 
+//                 $gte: `${startDate}, 00:00:00 AM`,
+//                 $lte: `${endDate}, 11:59:59 PM`
+//               }
+//             }
+//           ];
+//         }
+//       }
+//       else if (dateInStart) {
+        
+//         const dateStr = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+//         query.dateIn = { $regex: `^${dateStr}` };
+//       }
+//       else if (dateInEnd) {
+        
+//         const dateStr = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+//         query.dateIn = { $lte: `${dateStr}, 11:59:59 PM` };
+//       }
+//     }
+
+    
+//     if (dateOutStart || dateOutEnd) {
+//   // Initialize dateOut filter object
+//   const dateOutFilter = {};
+  
+//   // Format dates consistently
+//   const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+//   const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+
+//   // Case 1: Both start and end dates provided
+//   if (startDateStr && endDateStr) {
+//     if (startDateStr === endDateStr) {
+//       // Single day match - use regex for exact day
+//       dateOutFilter.$regex = `^${startDateStr}`;
+//     } else {
+//       // Date range - use string comparison
+//       dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
+//       dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+//     }
+//   }
+//   // Case 2: Only start date provided
+//   else if (startDateStr) {
+//     dateOutFilter.$regex = `^${startDateStr}`;
+//   }
+//   // Case 3: Only end date provided
+//   else if (endDateStr) {
+//     dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+//   }
+
+//   // Only apply the filter if we have valid conditions
+//   if (Object.keys(dateOutFilter).length > 0) {
+//     // Exclude empty dateOut values and apply the filter
+//     query.dateOut = {
+//       ...dateOutFilter,
+//       $ne: "", // Exclude empty values
+//       $exists: true // Ensure field exists
+//     };
+
+//     // For range queries, we need to ensure we don't match invalid date strings
+//     if (dateOutFilter.$gte || dateOutFilter.$lte) {
+//       query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
+//     }
+//   }
+// }
 
 
 Object.entries(filters).forEach(([key, value]) => {
@@ -1605,9 +1672,8 @@ Object.entries(filters).forEach(([key, value]) => {
       };
     }
     
-    // Role-based query conditions
     if (role === "admin") {
-      // No additional filters for admin
+      
     } else if (role === "employee") {
       query.listByEmployee = name;
     } else if (role === "client") {
@@ -1618,7 +1684,7 @@ Object.entries(filters).forEach(([key, value]) => {
 
       query = {
     $and: [
-      query, // Keep all existing filters
+      query, 
       {
         $or: [
           { userId: user.userId },
@@ -1628,16 +1694,10 @@ Object.entries(filters).forEach(([key, value]) => {
     ]
   };
       
-      // query = {
-      //   $or: [
-      //     { userId: user.userId },
-      //     { clientCode: user.clientCode }
-      //   ]
-      // };
     } else {
       return res.status(400).json({ success: false, message: "Invalid role specified" });
     }
-    
+    // console.log("query:",query)
     const [trackerData, totalCount] = await Promise.all([
       KYC.find(query, projection,filters)
         .sort({ _id: -1 })

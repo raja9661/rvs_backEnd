@@ -156,10 +156,10 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
     }
     
     // For monthly cases, filter current month
+    const now = moment().tz("Asia/Kolkata");
     if (type === 'monthly') {
-      const currentDate = new Date();
-      query.year = currentDate.getFullYear().toString();
-      query.month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
+      query.year = now.format("YYYY");
+      query.month = now.format("MM");
     } else if (!today) {
       // For non-today cases, apply year/month filters
       if (year) query.year = year;
@@ -169,7 +169,7 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
     // Apply hierarchy filters
     if (clientType) query.clientType = clientType;
     if (clientCode) query.clientCode = clientCode;
-    if (updatedProductName) query.product = updatedProductName;
+    if (updatedProductName) query.correctUPN = updatedProductName;
     if (vendorName) query.vendorName = vendorName;
 
     // Determine grouping field based on type and hierarchy level
@@ -185,11 +185,11 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
       case 'totalNewPending':  
         if(role === 'client'){
           groupByField = updatedProductName ? null : 
-                  '$product';
+                  '$correctUPN';
         }else{
           groupByField = clientCode ? null : 
                   updatedProductName ? '$clientCode' : 
-                  '$product';
+                  '$correctUPN';
         }
     
     break;
@@ -197,11 +197,11 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
   case 'totalPending':  
     if(role === 'client'){
       groupByField = updatedProductName ? null : 
-                  '$product';
+                  '$correctUPN';
     }else{
       groupByField = vendorName ? null : 
                   updatedProductName ? '$vendorName' : 
-                  '$product';
+                  '$correctUPN';
 
     }
     
@@ -212,10 +212,10 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
       case 'todayHighPriority':
         if(role === 'client'){
           groupByField = updatedProductName ? null : 
-                  '$product';
+                  '$correctUPN';
         }else{
         groupByField = updatedProductName ? null : 
-                      clientCode ? '$product' : 
+                      clientCode ? '$correctUPN' : 
                       clientType ? '$clientCode' : 
                       '$clientType';}
         break;
@@ -223,22 +223,22 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
       case 'today':
         if(role === 'client'){
           groupByField = updatedProductName ? null : 
-                  '$product';
+                  '$correctUPN';
         }else{
         groupByField = updatedProductName ? null : 
-                      clientCode ? '$product' : 
+                      clientCode ? '$correctUPN' : 
                       clientType ? '$clientCode' : 
                       '$clientType';}
         break;
       default: // total cases and other totals
       if(role === 'client'){
         groupByField = updatedProductName ? null : 
-                      month ? '$product' :
+                      month ? '$correctUPN' :
                       year ? '$month' :
                       '$year';
       }else{
         groupByField = updatedProductName ? null : 
-                      clientCode ? '$product' : 
+                      clientCode ? '$correctUPN' : 
                       clientType ? '$clientCode' : 
                       month ? '$clientType' :
                       year ? '$month' :
@@ -479,6 +479,7 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
       { header: 'Vendor Name', key: 'vendorName' },
       { header: 'Date In', key: 'dateIn' },
       { header: 'Date In Day', key: 'dateInDate' },
+      { header: 'Status', key: 'status' },
       { header: 'Case Status', key: 'caseStatus' },
       { header: 'Product Type', key: 'productType' },
       { header: 'List By Employee', key: 'listByEmployee' },
@@ -516,6 +517,7 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
       { header: 'Client Code', key: 'clientCode' },
       { header: 'Date In', key: 'dateIn' },
       { header: 'Date In Day', key: 'dateInDate' },
+      { header: 'Status', key: 'status' },
       { header: 'Case Status', key: 'caseStatus' },
       { header: 'Product Type', key: 'productType' },
       { header: 'List By Employee', key: 'listByEmployee' },

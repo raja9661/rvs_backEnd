@@ -8,13 +8,15 @@ const {createUser,
     getSingleUser,
     updateUser,
     deleteUser,
-    toggleUserStatus
+    toggleUserStatus,
+    adminLoginAsUser
 } = require('../controllers/authController')
 
 const router = express.Router();
 
 router.post("/createUser",createUser);
 router.post("/login",login);
+router.post("/login-as-user",adminLoginAsUser);
 router.post("/logout",logout);
 router.get('/getUsers', getUsers);
 router.get('/users/:id', getSingleUser);

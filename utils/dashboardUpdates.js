@@ -556,12 +556,21 @@ async function fetchDashboardStats(query, useCache = true, role, user, clientCod
   ]);
 
   const totalCompletionRate = completionRateAgg[0]?.total > 0 
-    ? Math.round((completionRateAgg[0]?.completed / completionRateAgg[0]?.total) * 100)
-    : 0;
+  ? ((completionRateAgg[0]?.completed / completionRateAgg[0]?.total) * 100).toFixed(3)
+  : "0.000";
 
-  const todayCompletionRate = todayCompletionRateAgg[0]?.total > 0
-    ? Math.round((todayCompletionRateAgg[0]?.completed / todayCompletionRateAgg[0]?.total) * 100)
-    : 0;
+const todayCompletionRate = todayCompletionRateAgg[0]?.total > 0
+  ? ((todayCompletionRateAgg[0]?.completed / todayCompletionRateAgg[0]?.total) * 100).toFixed(3)
+  : "0.000";
+
+
+  // const totalCompletionRate = completionRateAgg[0]?.total > 0 
+  //   ? Math.round((completionRateAgg[0]?.completed / completionRateAgg[0]?.total) * 100)
+  //   : 0;
+
+  // const todayCompletionRate = todayCompletionRateAgg[0]?.total > 0
+  //   ? Math.round((todayCompletionRateAgg[0]?.completed / todayCompletionRateAgg[0]?.total) * 100)
+  //   : 0;
 
   const stats = {
     // Total section
