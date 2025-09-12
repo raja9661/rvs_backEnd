@@ -400,7 +400,8 @@ exports.singleUpload = async (req, res) => {
       ReferBy:ReferBy||"",
       year: date.getFullYear().toString(),
       month: (date.getMonth() + 1).toString().padStart(2, '0'),
-      isDedup:isduplicate
+      isDedup:isduplicate,
+      ModifyedAt:""
     });
 
     const response = await newKYC.save();
@@ -940,7 +941,8 @@ if (userId && clientId) {
         ReferBy: ReferBy || "",
         isDedup: isITOduplicate,
         year: date.getFullYear().toString(),
-        month: (date.getMonth() + 1).toString().padStart(2, '0')
+        month: (date.getMonth() + 1).toString().padStart(2, '0'),
+        ModifyedAt:''
       });
     }
 
@@ -1276,7 +1278,8 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
         ReferBy:ReferBy || "",
         year: new Date().getFullYear().toString(),
         month: (new Date().getMonth() + 1).toString().padStart(2, '0'),
-        isDedup:isduplicate
+        isDedup:isduplicate,
+        ModifyedAt:''
       });
 
       results.inserted++;
@@ -2401,6 +2404,7 @@ exports.updateTrackerData = async (req, res) => {
       const updatePayload = {
         [changedField]: newValue,
         updatedAt: getFormattedDateTime(),
+        ModifyedAt:getFormattedDateTime(),
         updatedBy: userName,
         updatedById: userId
       };
@@ -5248,6 +5252,8 @@ exports.batchUpdate = async (req, res) => {
             clientTATUpdates++;
           }
         }
+
+        updateFields.ModifyedAt = getFormattedDateTime();
 
         // Update in DB
         const result = await KYC.updateOne(

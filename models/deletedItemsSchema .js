@@ -47,6 +47,7 @@ const DeletedItemsSchema = new mongoose.Schema({
     vendorStatus:{ type: String, default: "" },
     year: { type: String }, // Add year field
     month: { type: String }, // Add month field
+    ModifyedAt:{ type: String,default: ""  },
     // role: { type: String, enum: ["admin", "employee", "client"]},
 
     attachments: [{

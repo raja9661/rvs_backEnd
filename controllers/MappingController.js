@@ -846,6 +846,21 @@ exports.getClientTrackerSummary = async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 500);
     const skip = (page - 1) * limit;
 
+    // Helper function to create case-insensitive regex
+    const createCaseInsensitiveFilter = (value) => {
+      if (!value) return null;
+      return { $regex: value, $options: 'i' };
+    };
+
+    // Add search functionality to match stage
+    if (req.query.search) {
+      const searchRegex = createCaseInsensitiveFilter(req.query.search);
+      match.$or = [
+        { userId: searchRegex },
+        { clientCode: searchRegex }
+      ];
+    }
+
     const pipeline = [
       { $match: match },
       {
@@ -903,11 +918,75 @@ exports.getClientTrackerSummary = async (req, res) => {
     return res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+// exports.getClientTrackerSummary = async (req, res) => {
+//   try {
+//     const match = buildMatch(req.query);
+//     const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+//     const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 500);
+//     const skip = (page - 1) * limit;
+
+//     const pipeline = [
+//       { $match: match },
+//       {
+//         $group: {
+//           _id: { userId: '$userId', clientCode: '$clientCode' },
+//           total: { $sum: 1 },
+//           totalClosed: {
+//             $sum: {
+//               $cond: [
+//                 {
+//                   $in: [
+//                     { $toLower: { $ifNull: ['$status', ''] } },
+//                     ['closed', 'complete', 'completed', 'done']
+//                   ]
+//                 },
+//                 1,
+//                 0
+//               ]
+//             }
+//           }
+//         }
+//       },
+//       {
+//         $project: {
+//           _id: 0,
+//           userId: '$_id.userId',
+//           clientCode: '$_id.clientCode',
+//           total: 1,
+//           totalClosed: 1,
+//           completionRate: {
+//             $cond: [
+//               { $gt: ['$total', 0] },
+//               { $round: [{ $multiply: [{ $divide: ['$totalClosed', '$total'] }, 100] }, 3] },
+//               0
+//             ]
+//           }
+//         }
+//       },
+//       { $sort: { userId: 1, clientCode: 1 } },
+//       {
+//         $facet: {
+//           data: [{ $skip: skip }, { $limit: limit }],
+//           meta: [{ $count: 'totalGroups' }]
+//         }
+//       }
+//     ];
+
+//     const result = await KYCdoc.aggregate(pipeline);
+//     const data = result[0]?.data || [];
+//     const totalGroups = result[0]?.meta?.[0]?.totalGroups || 0;
+
+//     return res.json({ page, limit, totalGroups, data });
+//   } catch (err) {
+//     console.error('getClientTrackerSummary error:', err);
+//     return res.status(500).json({ message: 'Server error', error: err.message });
+//   }
+// };
 
 // GET /api/client-tracker/cases?userId=...&clientCode=...&page=1&limit=50
 exports.getUserCases = async (req, res) => {
   try {
-    console.log("hello")
+   
     const { userId, clientCode } = req.query;
     if (!userId) return res.status(400).json({ message: 'userId is required' });
 
@@ -937,6 +1016,7 @@ exports.getUserCases = async (req, res) => {
           accountNumber: 1,
           requirement: 1,
           dateIn: 1,
+          vendorName: 1,
           dateOut: 1,
           sentBy: 1,
           vendorName: 1,
@@ -958,72 +1038,265 @@ exports.getUserCases = async (req, res) => {
 // GET /api/client-tracker/download?userId=...&clientCode=...
 exports.downloadUserCasesExcel = async (req, res) => {
   try {
-    const { userId, clientCode } = req.query;
-    if (!userId) return res.status(400).json({ message: 'userId is required' });
+  const { userId, clientCode } = req.query;
+  if (!userId) return res.status(400).json({ message: 'userId is required' });
 
-    const find = { userId: String(userId) };
-    if (clientCode) find.clientCode = String(clientCode);
+  const find = { userId: String(userId) };
+  if (clientCode) find.clientCode = String(clientCode);
 
-    const cursor = KYCdoc.find(find).sort({ createdAt: -1 }).lean().cursor();
+  const cursor = KYCdoc.find(find).sort({ createdAt: -1 }).lean().cursor();
 
-    const ExcelJS = require('exceljs');
-    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
-      stream: res,
-      useStyles: true,
-      useSharedStrings: true
+  const ExcelJS = require('exceljs');
+  const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+    stream: res,
+    useStyles: true,
+    useSharedStrings: true
+  });
+
+  const worksheet = workbook.addWorksheet('Cases');
+
+  worksheet.columns = [
+    { header: 'User ID', key: 'userId', width: 18 },
+    { header: 'Case ID', key: 'caseId', width: 18 },
+    { header: 'Attachments', key: 'attachments', width: 24 }, // added
+    { header: 'Remarks', key: 'remarks', width: 22 },
+    { header: 'Name', key: 'name', width: 20 },
+    { header: 'Details', key: 'details', width: 22 },
+    { header: 'Details 1', key: 'details1', width: 22 },
+    { header: 'Priority', key: 'priority', width: 16 },
+    { header: 'Correct UPN', key: 'correctUPN', width: 20 },
+    { header: 'Product', key: 'product', width: 20 },
+    { header: 'Updated Product', key: 'updatedProductName', width: 24 },
+    { header: 'Product Type', key: 'productType', width: 18 },
+    { header: 'Account Number', key: 'accountNumber', width: 20 },
+    { header: 'Account Number Digit', key: 'accountNumberDigit', width: 22 },
+    { header: 'Requirement', key: 'requirement', width: 24 },
+    { header: 'Updated Requirement', key: 'updatedRequirement', width: 26 },
+    { header: 'Bank Code', key: 'bankCode', width: 16 },
+    { header: 'Client Code', key: 'clientCode', width: 18 },
+    { header: 'Client Type', key: 'clientType', width: 18 },
+    { header: 'Client TAT', key: 'clientTAT', width: 18 },
+    { header: 'Vendor Name', key: 'vendorName', width: 20 },
+    { header: 'Vendor Rate', key: 'vendorRate', width: 18 },
+    { header: 'Client Rate', key: 'clientRate', width: 18 },
+    { header: 'Vendor Status', key: 'vendorStatus', width: 20 },
+    { header: 'Status', key: 'status', width: 16 },
+    { header: 'Case Status', key: 'caseStatus', width: 20 },
+    { header: 'List Of Employee', key: 'listByEmployee', width: 22 },
+    { header: 'Date In', key: 'dateIn', width: 18 },
+    { header: 'Date In (Day)', key: 'dateInDate', width: 20 },
+    { header: 'Date Out', key: 'dateOut', width: 18 },
+    { header: 'Date Out (Day)', key: 'dateOutInDay', width: 20 },
+    { header: 'Sent By', key: 'sentBy', width: 18 },
+    { header: 'Auto/Manual', key: 'autoOrManual', width: 18 },
+    { header: 'Case Done By', key: 'caseDoneBy', width: 22 },
+    { header: 'Customer Care', key: 'customerCare', width: 22 },
+    { header: 'Sent Date', key: 'sentDate', width: 20 },
+    { header: 'Sent Date (Day)', key: 'sentDateInDay', width: 22 },
+    { header: 'Dedup By', key: 'dedupBy', width: 20 },
+    { header: 'Name Upload By', key: 'NameUploadBy', width: 22 },
+    { header: 'Refer By', key: 'ReferBy', width: 20 },
+    { header: 'Is Rechecked', key: 'isRechecked', width: 16 },
+    { header: 'Is Dedup', key: 'isDedup', width: 16 },
+    { header: 'Rechecked At', key: 'recheckedAt', width: 22 },
+    { header: 'IP Address', key: 'ipAddress', width: 20 },
+    { header: 'Year', key: 'year', width: 12 },
+    { header: 'Month', key: 'month', width: 12 },
+    { header: 'Modifyed At', key: 'ModifyedAt', width: 22 }
+  ];
+
+  const fileName = `cases_${userId}${clientCode ? `_${clientCode}` : ''}.xlsx`;
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+  for await (const r of cursor) {
+    let row = worksheet.addRow({
+      userId: r.userId || '',
+      caseId: r.caseId || '',
+      remarks: r.remarks || '',
+      name: r.name || '',
+      details: r.details || '',
+      details1: r.details1 || '',
+      priority: r.priority || '',
+      correctUPN: r.correctUPN || '',
+      product: r.product || '',
+      updatedProductName: r.updatedProductName || '',
+      productType: r.productType || '',
+      accountNumber: r.accountNumber || '',
+      accountNumberDigit: r.accountNumberDigit || '',
+      requirement: r.requirement || '',
+      updatedRequirement: r.updatedRequirement || '',
+      bankCode: r.bankCode || '',
+      clientCode: r.clientCode || '',
+      clientType: r.clientType || '',
+      clientTAT: r.clientTAT || '',
+      vendorName: r.vendorName || '',
+      vendorRate: r.vendorRate || '',
+      clientRate: r.clientRate || '',
+      vendorStatus: r.vendorStatus || '',
+      status: r.status || '',
+      caseStatus: r.caseStatus || '',
+      listByEmployee: r.listByEmployee || '',
+      dateIn: r.dateIn || '',
+      dateInDate: r.dateInDate || '',
+      dateOut: r.dateOut || '',
+      dateOutInDay: r.dateOutInDay || '',
+      sentBy: r.sentBy || '',
+      autoOrManual: r.autoOrManual || '',
+      caseDoneBy: r.caseDoneBy || '',
+      customerCare: r.customerCare || '',
+      sentDate: r.sentDate || '',
+      sentDateInDay: r.sentDateInDay || '',
+      dedupBy: r.dedupBy || '',
+      NameUploadBy: r.NameUploadBy || '',
+      ReferBy: r.ReferBy || '',
+      isRechecked: r.isRechecked || '',
+      isDedup: r.isDedup || '',
+      recheckedAt: r.recheckedAt ? new Date(r.recheckedAt).toISOString() : '',
+      ipAddress: r.ipAddress || '',
+      year: r.year || '',
+      month: r.month || '',
+      role: r.role || '',
+      ModifyedAt:r.ModifyedAt || '',
     });
 
-    const worksheet = workbook.addWorksheet('Cases');
-
-    worksheet.columns = [
-      { header: 'User ID', key: 'userId', width: 18 },
-      { header: 'Client Code', key: 'clientCode', width: 16 },
-      { header: 'Case ID', key: 'caseId', width: 18 },
-      { header: 'Product', key: 'product', width: 20 },
-      { header: 'Updated Product', key: 'updatedProductName', width: 22 },
-      { header: 'Correct UPN', key: 'correctUPN', width: 18 },
-      { header: 'Status', key: 'status', width: 14 },
-      { header: 'Case Status', key: 'caseStatus', width: 18 },
-      { header: 'List Of Employee', key: 'listByEmployee', width: 20 },
-      { header: 'Vendor Status', key: 'vendorStatus', width: 18 },
-      { header: 'Vendor Name', key: 'vendorName', width: 18 },
-      { header: 'Requirement', key: 'requirement', width: 24 },
-      { header: 'Account Number', key: 'accountNumber', width: 20 },
-      { header: 'Date In', key: 'dateIn', width: 16 },
-      { header: 'Date Out', key: 'dateOut', width: 16 },
-      { header: 'Sent By', key: 'sentBy', width: 16 },
-      { header: 'Created At', key: 'createdAt', width: 22 }
-    ];
-
-    const fileName = `cases_${userId}${clientCode ? `_${clientCode}` : ''}.xlsx`;
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-
-    for await (const r of cursor) {
-      worksheet.addRow({
-        userId: r.userId || '',
-        clientCode: r.clientCode || '',
-        caseId: r.caseId || '',
-        product: r.product || '',
-        updatedProductName: r.updatedProductName || '',
-        correctUPN: r.correctUPN || '',
-        status: r.status || '',
-        caseStatus: r.caseStatus || '',
-        listByEmployee: r.listByEmployee || '',
-        vendorStatus: r.vendorStatus || '',
-        vendorName: r.vendorName || '',
-        requirement: r.requirement || '',
-        accountNumber: r.accountNumber || '',
-        dateIn: r.dateIn || '',
-        dateOut: r.dateOut || '',
-        sentBy: r.sentBy || '',
-        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : ''
-      }).commit();
+    // 🔗 Add hyperlink for first attachment
+    if (r.attachments && Array.isArray(r.attachments)) {
+      let firstAttachment = r.attachments[0];
+      if (firstAttachment && firstAttachment.location) {
+        let cell = row.getCell("attachments");
+        cell.value = { text: "Open Attachment", hyperlink: firstAttachment.location };
+        cell.font = { color: { argb: 'FF0000FF' }, underline: true };
+      }
     }
 
-    worksheet.commit();
-    await workbook.commit(); // closes the stream
-  } catch (err) {
+    row.commit();
+  }
+
+  worksheet.commit();
+  await workbook.commit();
+}
+
+//   try {
+//     const { userId, clientCode } = req.query;
+//     if (!userId) return res.status(400).json({ message: 'userId is required' });
+
+//     const find = { userId: String(userId) };
+//     if (clientCode) find.clientCode = String(clientCode);
+
+//     const cursor = KYCdoc.find(find).sort({ createdAt: -1 }).lean().cursor();
+
+//     const ExcelJS = require('exceljs');
+//     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+//       stream: res,
+//       useStyles: true,
+//       useSharedStrings: true
+//     });
+
+//     const worksheet = workbook.addWorksheet('Cases');
+
+//     worksheet.columns = [
+//   { header: 'User ID', key: 'userId', width: 18 },
+//   { header: 'Case ID', key: 'caseId', width: 18 },
+//   { header: 'Remarks', key: 'remarks', width: 22 },
+//   { header: 'Name', key: 'name', width: 20 },
+//   { header: 'Details', key: 'details', width: 22 },
+//   { header: 'Details 1', key: 'details1', width: 22 },
+//   { header: 'Priority', key: 'priority', width: 16 },
+//   { header: 'Correct UPN', key: 'correctUPN', width: 20 },
+//   { header: 'Product', key: 'product', width: 20 },
+//   { header: 'Updated Product', key: 'updatedProductName', width: 24 },
+//   { header: 'Product Type', key: 'productType', width: 18 },
+//   { header: 'Account Number', key: 'accountNumber', width: 20 },
+//   { header: 'Account Number Digit', key: 'accountNumberDigit', width: 22 },
+//   { header: 'Requirement', key: 'requirement', width: 24 },
+//   { header: 'Updated Requirement', key: 'updatedRequirement', width: 26 },
+//   { header: 'Bank Code', key: 'bankCode', width: 16 },
+//   { header: 'Client Code', key: 'clientCode', width: 18 },
+//   { header: 'Client Type', key: 'clientType', width: 18 },
+//   { header: 'Client TAT', key: 'clientTAT', width: 18 },
+//   { header: 'Vendor Name', key: 'vendorName', width: 20 },
+//   { header: 'Vendor Rate', key: 'vendorRate', width: 18 },
+//   { header: 'Client Rate', key: 'clientRate', width: 18 },
+//   { header: 'Vendor Status', key: 'vendorStatus', width: 20 },
+//   { header: 'Status', key: 'status', width: 16 },
+//   { header: 'Case Status', key: 'caseStatus', width: 20 },
+//   { header: 'List Of Employee', key: 'listByEmployee', width: 22 },
+//   { header: 'Date In', key: 'dateIn', width: 18 },
+//   { header: 'Date In (Day)', key: 'dateInDate', width: 20 },
+//   { header: 'Date Out', key: 'dateOut', width: 18 },
+//   { header: 'Date Out (Day)', key: 'dateOutInDay', width: 20 },
+//   { header: 'Sent By', key: 'sentBy', width: 18 },
+//   { header: 'Auto/Manual', key: 'autoOrManual', width: 18 },
+//   { header: 'Case Done By', key: 'caseDoneBy', width: 22 },
+//   { header: 'Customer Care', key: 'customerCare', width: 22 },
+//   { header: 'Sent Date', key: 'sentDate', width: 20 },
+//   { header: 'Sent Date (Day)', key: 'sentDateInDay', width: 22 },
+//   { header: 'Dedup By', key: 'dedupBy', width: 20 },
+//   { header: 'Name Upload By', key: 'NameUploadBy', width: 22 },
+//   { header: 'Refer By', key: 'ReferBy', width: 20 },
+//   { header: 'Is Rechecked', key: 'isRechecked', width: 16 },
+//   { header: 'Is Dedup', key: 'isDedup', width: 16 },
+//   { header: 'Rechecked At', key: 'recheckedAt', width: 22 },
+//   { header: 'IP Address', key: 'ipAddress', width: 20 },
+//   { header: 'Year', key: 'year', width: 12 },
+//   { header: 'Month', key: 'month', width: 12 },
+//   { header: 'Role', key: 'role', width: 14 },
+//   { header: 'Created At', key: 'createdAt', width: 22 },
+//   { header: 'Updated At', key: 'updatedAt', width: 22 }
+// ];
+
+
+//     // worksheet.columns = [
+//     //   { header: 'User ID', key: 'userId', width: 18 },
+//     //   { header: 'Client Code', key: 'clientCode', width: 16 },
+//     //   { header: 'Case ID', key: 'caseId', width: 18 },
+//     //   { header: 'Product', key: 'product', width: 20 },
+//     //   { header: 'Updated Product', key: 'updatedProductName', width: 22 },
+//     //   { header: 'Correct UPN', key: 'correctUPN', width: 18 },
+//     //   { header: 'Status', key: 'status', width: 14 },
+//     //   { header: 'Case Status', key: 'caseStatus', width: 18 },
+//     //   { header: 'List Of Employee', key: 'listByEmployee', width: 20 },
+//     //   { header: 'Vendor Status', key: 'vendorStatus', width: 18 },
+//     //   { header: 'Vendor Name', key: 'vendorName', width: 18 },
+//     //   { header: 'Requirement', key: 'requirement', width: 24 },
+//     //   { header: 'Account Number', key: 'accountNumber', width: 20 },
+//     //   { header: 'Date In', key: 'dateIn', width: 16 },
+//     //   { header: 'Date Out', key: 'dateOut', width: 16 },
+//     //   { header: 'Sent By', key: 'sentBy', width: 16 },
+//     //   { header: 'Created At', key: 'createdAt', width: 22 }
+//     // ];
+
+//     const fileName = `cases_${userId}${clientCode ? `_${clientCode}` : ''}.xlsx`;
+//     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+//     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+//     for await (const r of cursor) {
+//       worksheet.addRow({
+//         userId: r.userId || '',
+//         clientCode: r.clientCode || '',
+//         caseId: r.caseId || '',
+//         product: r.product || '',
+//         updatedProductName: r.updatedProductName || '',
+//         correctUPN: r.correctUPN || '',
+//         status: r.status || '',
+//         caseStatus: r.caseStatus || '',
+//         listByEmployee: r.listByEmployee || '',
+//         vendorStatus: r.vendorStatus || '',
+//         vendorName: r.vendorName || '',
+//         requirement: r.requirement || '',
+//         accountNumber: r.accountNumber || '',
+//         dateIn: r.dateIn || '',
+//         dateOut: r.dateOut || '',
+//         sentBy: r.sentBy || '',
+//         createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : ''
+//       }).commit(); 
+//     }
+
+//     worksheet.commit();
+//     await workbook.commit(); // closes the stream
+//   } 
+  catch (err) {
     console.error('downloadUserCasesExcel error:', err);
     if (!res.headersSent) {
       return res.status(500).json({ message: 'Server error', error: err.message });

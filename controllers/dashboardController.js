@@ -411,9 +411,7 @@ query.dateIn = {  $regex: currentDate.format("DD-MM-YYYY")  }
   { header: 'Rechecked At', key: 'recheckedAt' },
   { header: 'Year', key: 'year' },
   { header: 'Month', key: 'month' },
-  { header: 'Role', key: 'role' },
-  { header: 'Created At', key: 'createdAt' },
-  { header: 'Updated At', key: 'updatedAt' }
+  { header: 'Modifyed At', key: 'ModifyedAt' }
 ],
 
     // admin: [
