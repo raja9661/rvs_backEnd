@@ -4,31 +4,40 @@ const XLSX = require("xlsx");
 const fs = require("fs");
 const path = require("path");
 const XlsxPopulate = require("xlsx-populate");
-const mongoose = require("mongoose"); // Add this import for ObjectId conversion
-const moment = require('moment-timezone');
+const mongoose = require("mongoose");
+const moment = require("moment-timezone");
 const Fuse = require("fuse.js");
 const User = require("../models/users");
-const {RevisedProduct, Product, Vendor, ClientCode,ManageClientCode,Allvendors } = require("../models/MappingItems");
-const {EmployeeAccess,ClientAccess} = require("../models/editableColumn");
+const {
+  RevisedProduct,
+  Product,
+  Vendor,
+  ClientCode,
+  ManageClientCode,
+  Allvendors,
+} = require("../models/MappingItems");
+const { EmployeeAccess, ClientAccess } = require("../models/editableColumn");
 const editableColumn = require("../models/editableColumn");
 const DeletedItems = require("../models/deletedItemsSchema ");
 const axios = require("axios");
 const upload = require("../config/multer");
 const { getIo } = require("../config/socket");
-const { GetObjectCommand ,HeadObjectCommand } = require("@aws-sdk/client-s3");
-const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
-const s3 = require('../config/s3Config');
+const { GetObjectCommand, HeadObjectCommand } = require("@aws-sdk/client-s3");
+const { DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const s3 = require("../config/s3Config");
 const streamToBuffer = require("../utils/streamToBuffer");
-const Counter = require("../models/uniqueCaseId"); 
+const Counter = require("../models/uniqueCaseId");
 // const ColumnConfig = require("../models/ColumnPreferences");
-const { 
+const {
   fetchDashboardStats,
   getRecentActivity,
   sendDashboardUpdates,
-  getVerificationTrendsData
+  getVerificationTrendsData,
 } = require("../utils/dashboardUpdates");
-const { parseCustomDateTime,  formatForFrontend } = require('../utils/dateUtils');
-
+const {
+  parseCustomDateTime,
+  formatForFrontend,
+} = require("../utils/dateUtils");
 
 const date = new Date();
 const generateCaseId = () => {
@@ -191,7 +200,6 @@ exports.getProductname = async (req, res) => {
   }
 };
 
-
 let client_user = "";
 const getClientCode = async (userId, clientId) => {
   const user = await User.findOne({ userId: clientId });
@@ -204,7 +212,7 @@ const getClientCode = async (userId, clientId) => {
 
     // Check if it matches any client code directly
     const client = await ClientCode.findOne({
-      clientCode: { $in: [normalizedInput] }, 
+      clientCode: { $in: [normalizedInput] },
     });
 
     return client ? normalizedInput : null;
@@ -215,11 +223,9 @@ const getIPAddress = (req) => {
   return req.headers["x-forwarded-for"] || req.connection.remoteAddress;
 };
 
-
-
 const generateRandomAlphanumeric = (length = 6) => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
   for (let i = 0; i < length; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -228,7 +234,7 @@ const generateRandomAlphanumeric = (length = 6) => {
 
 const generateUniqueCaseId = async () => {
   let unique = false;
-  let caseId = '';
+  let caseId = "";
 
   while (!unique) {
     caseId = generateRandomAlphanumeric(6);
@@ -239,25 +245,24 @@ const generateUniqueCaseId = async () => {
   return caseId;
 };
 
-
-
-
-
-
-
 // Single KYC Upload
 
 function normalizeProductName(name) {
   return name.trim().toUpperCase();
 }
 
-
-
 exports.singleUpload = async (req, res) => {
   try {
-    let { name, product, accountNumber, requirement, userId, clientId,ReferBy } =
-      req.body;
-      
+    let {
+      name,
+      product,
+      accountNumber,
+      requirement,
+      userId,
+      clientId,
+      ReferBy,
+    } = req.body;
+
     let NameUploadBy = "";
     let userclientcode = "";
     if (!userId) {
@@ -265,35 +270,34 @@ exports.singleUpload = async (req, res) => {
         .status(400)
         .json({ success: false, message: "User ID is required" });
     }
-    if(userId && clientId)
-    {
-      NameUploadBy = userId
+    if (userId && clientId) {
+      NameUploadBy = userId;
       const user = await User.findOne({ clientCode: clientId });
-      
-      if(!user){
-        return res
-        .status(400)
-        .json({ success: false, message: `No user is Found with this client code ${clientId}` });
-      }else{
-        userclientcode = clientId
+
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: `No user is Found with this client code ${clientId}`,
+        });
+      } else {
+        userclientcode = clientId;
       }
     }
-    if(userId && !clientId){
-      NameUploadBy = userId
+    if (userId && !clientId) {
+      NameUploadBy = userId;
       const user = await User.findOne({ userId: userId });
-      if(!user){
-        return res
-        .status(400)
-        .json({ success: false, message: `No user is Found with this userId ${userId}` });
-      }else{
-        userclientcode = user.clientCode
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: `No user is Found with this userId ${userId}`,
+        });
+      } else {
+        userclientcode = user.clientCode;
       }
     }
-    
 
     // Resolve client code (handles both clientId and clientCode input)
     // let userclientcode = await getClientCode(userId, clientId);
-
 
     const currentDate = moment().format("YYYY-MM-DD");
 
@@ -302,7 +306,7 @@ exports.singleUpload = async (req, res) => {
       accountNumber,
       product,
       requirement,
-      clientCode:userclientcode,
+      clientCode: userclientcode,
       createdAt: {
         $gte: new Date(`${currentDate}T00:00:00Z`),
         $lt: new Date(`${currentDate}T23:59:59Z`),
@@ -310,47 +314,47 @@ exports.singleUpload = async (req, res) => {
     });
 
     if (existingKYC) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Duplicate KYC request for the same day",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Duplicate KYC request for the same day",
+      });
     }
 
     const normalizedProduct = normalizeProductName(product);
-    const manualMapping = await RevisedProduct.findOne({ productName:normalizedProduct});
-    let  standardized = ""
-    if(manualMapping){
+    const manualMapping = await RevisedProduct.findOne({
+      productName: normalizedProduct,
+    });
+    let standardized = "";
+    if (manualMapping) {
       // console.log("manualMapping:",manualMapping)
       standardized = {
-      updatedName: manualMapping.updatedProduct,
-      upn: manualMapping.correctUPN,
-      productType: manualMapping.productType,
-    };
-    }else{
-
+        updatedName: manualMapping.updatedProduct,
+        upn: manualMapping.correctUPN,
+        productType: manualMapping.productType,
+      };
+    } else {
       return res.status(404).json({
-      success: false,
-      message: "Product not Found ",
-      error: "Product not Found "
-    });
-
+        success: false,
+        message: "Product not Found ",
+        error: "Product not Found ",
+      });
     }
 
     // Standardize product name
-    
-    let isduplicate = false
-    if(standardized.productType === "ITO"){
 
-    const existingKYCRecords = await KYC.find({ accountNumber, product:normalizedProduct });
-    if (existingKYCRecords.length > 0) {
-      isduplicate = true
-    for (const record of existingKYCRecords) {
-    record.isDedup = true;
-    await record.save(); 
-  }
-}
+    let isduplicate = false;
+    if (standardized.productType === "ITO") {
+      const existingKYCRecords = await KYC.find({
+        accountNumber,
+        product: normalizedProduct,
+      });
+      if (existingKYCRecords.length > 0) {
+        isduplicate = true;
+        for (const record of existingKYCRecords) {
+          record.isDedup = true;
+          await record.save();
+        }
+      }
     }
 
     // Get additional data
@@ -361,20 +365,20 @@ exports.singleUpload = async (req, res) => {
       const employee = await User.findOne({ name: empName });
       customerCare = employee?.phoneNumber || "";
     }
-    
+
     const vendor = await Allvendors.findOne({
       productName: normalizedProduct,
-      vendorType: 'default'
-   });
-    
+      vendorType: "default",
+    });
+
     const vandorname = vendor?.vendorName || "not found";
 
     let ipAddress = getIPAddress(req);
-            if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
-              const ipResponse = await axios.get("https://api64.ipify.org?format=json");
-              ipAddress = ipResponse.data.ip; // Get actual public IP
-            }
-    const uniqueCaseId = await generateUniqueCaseId()
+    if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
+      const ipResponse = await axios.get("https://api64.ipify.org?format=json");
+      ipAddress = ipResponse.data.ip; // Get actual public IP
+    }
+    const uniqueCaseId = await generateUniqueCaseId();
     // Create new KYC record
     const newKYC = new KYC({
       name,
@@ -397,11 +401,11 @@ exports.singleUpload = async (req, res) => {
       customerCare,
       NameUploadBy,
       ipAddress,
-      ReferBy:ReferBy||"",
+      ReferBy: ReferBy || "",
       year: date.getFullYear().toString(),
-      month: (date.getMonth() + 1).toString().padStart(2, '0'),
-      isDedup:isduplicate,
-      ModifyedAt:""
+      month: (date.getMonth() + 1).toString().padStart(2, "0"),
+      isDedup: isduplicate,
+      ModifyedAt: "",
     });
 
     const response = await newKYC.save();
@@ -420,7 +424,6 @@ exports.singleUpload = async (req, res) => {
     });
   }
 };
-
 
 // exports.bulkUpload = async (req, res) => {
 //   try {
@@ -485,7 +488,7 @@ exports.singleUpload = async (req, res) => {
 //         results.failedRecords.push({ ...row, error: "Missing required fields" });
 //         continue;
 //       }
-      
+
 //       normalizedProduct = normalizeProductName(product);
 //       manualMapping = await RevisedProduct.findOne({ productName:normalizedProduct });
 
@@ -495,7 +498,6 @@ exports.singleUpload = async (req, res) => {
 //         console.log("Result:",results)
 //         continue;
 //       }
-      
 
 //       // Resolve actual clientCode (same logic as singleUpload)
 //       let resolvedClientCode = "";
@@ -697,8 +699,6 @@ exports.singleUpload = async (req, res) => {
 //   }
 // };
 
-
-
 exports.bulkUpload = async (req, res) => {
   try {
     const { data } = req.body;
@@ -728,88 +728,98 @@ exports.bulkUpload = async (req, res) => {
 
     // STEP 1: Collect IDs for preloading
     // STEP 1: Collect IDs for preloading
-for (const row of data) {
-  if (row.userId) uniqueUserIds.add(row.userId.trim());
+    for (const row of data) {
+      if (row.userId) uniqueUserIds.add(row.userId.trim());
 
-  if (row.clientId) {
-    clientCodeSet.add(row.clientId.trim());  // Admin uploads
-  } else if (row.userId) {
-    // Fallback: resolve clientCode later from userId (client uploads)
-    const user = await User.findOne({ userId: row.userId.trim() }).lean();
-    if (user?.clientCode) {
-      clientCodeSet.add(user.clientCode.trim());
+      if (row.clientId) {
+        clientCodeSet.add(row.clientId.trim()); // Admin uploads
+      } else if (row.userId) {
+        // Fallback: resolve clientCode later from userId (client uploads)
+        const user = await User.findOne({ userId: row.userId.trim() }).lean();
+        if (user?.clientCode) {
+          clientCodeSet.add(user.clientCode.trim());
+        }
+      }
     }
-  }
-}
-
 
     // STEP 2: Preload users
     const users = await User.find({
       $or: [
         { userId: { $in: Array.from(uniqueUserIds) } },
-        { clientCode: { $in: Array.from(clientCodeSet) } }
-      ]
+        { clientCode: { $in: Array.from(clientCodeSet) } },
+      ],
     }).lean();
 
     const userIdMap = {};
     const clientCodeUserMap = {};
-    users.forEach(u => {
+    users.forEach((u) => {
       userIdMap[u.userId] = u;
       clientCodeUserMap[u.clientCode] = u;
     });
 
     // STEP 3: Preload product mappings
-    const normalizedProducts = [...new Set(data.map(r => normalizeProductName(String(r.product || "").trim())))];
-    const allProducts = await RevisedProduct.find({ productName: { $in: normalizedProducts } }).lean();
+    const normalizedProducts = [
+      ...new Set(
+        data.map((r) => normalizeProductName(String(r.product || "").trim()))
+      ),
+    ];
+    const allProducts = await RevisedProduct.find({
+      productName: { $in: normalizedProducts },
+    }).lean();
     const productMap = {};
-    allProducts.forEach(p => {
+    allProducts.forEach((p) => {
       productMap[p.productName] = p;
     });
 
     // STEP 4: Preload vendors
     const allVendors = await Allvendors.find({
       productName: { $in: normalizedProducts },
-      vendorType: "default"
+      vendorType: "default",
     }).lean();
     const vendorMap = {};
-    allVendors.forEach(v => {
+    allVendors.forEach((v) => {
       vendorMap[v.productName] = v.vendorName;
     });
 
     // STEP 5: Preload clientCodes → employees
     // STEP 5: Preload clientCodes → employees
-const allClientCodes = await ClientCode.find({ clientCode: { $in: Array.from(clientCodeSet) } }).lean();
-console.log("allClientCodes", allClientCodes);
+    const allClientCodes = await ClientCode.find({
+      clientCode: { $in: Array.from(clientCodeSet) },
+    }).lean();
+    console.log("allClientCodes", allClientCodes);
 
-const clientCodeEmpMap = {};
-allClientCodes.forEach(c => {
-  if (Array.isArray(c.clientCode)) {
-    c.clientCode.forEach(code => {
-      clientCodeEmpMap[code] = c.EmployeeName;
+    const clientCodeEmpMap = {};
+    allClientCodes.forEach((c) => {
+      if (Array.isArray(c.clientCode)) {
+        c.clientCode.forEach((code) => {
+          clientCodeEmpMap[code] = c.EmployeeName;
+        });
+      } else {
+        clientCodeEmpMap[c.clientCode] = c.EmployeeName;
+      }
     });
-  } else {
-    clientCodeEmpMap[c.clientCode] = c.EmployeeName;
-  }
-});
 
-// Extract all employee names from mapping
-const employeeNames = Object.values(clientCodeEmpMap).filter(Boolean);
+    // Extract all employee names from mapping
+    const employeeNames = Object.values(clientCodeEmpMap).filter(Boolean);
 
-// Get employee details (phone numbers etc.)
-const allEmployees = await User.find({ name: { $in: employeeNames } }).lean();
-const empPhoneMap = {};
-allEmployees.forEach(e => { empPhoneMap[e.name] = e.phoneNumber; });
-
-
-
+    // Get employee details (phone numbers etc.)
+    const allEmployees = await User.find({
+      name: { $in: employeeNames },
+    }).lean();
+    const empPhoneMap = {};
+    allEmployees.forEach((e) => {
+      empPhoneMap[e.name] = e.phoneNumber;
+    });
 
     // STEP 6: Preload ITO records once
     const itoRecords = await KYC.find({
-      accountNumber: { $in: data.map(r => String(r.accountNumber || "").trim()) },
-      productType: "ITO"
+      accountNumber: {
+        $in: data.map((r) => String(r.accountNumber || "").trim()),
+      },
+      productType: "ITO",
     }).lean();
-    
-    const itoSet = new Set(itoRecords.map(r => r.accountNumber));
+
+    const itoSet = new Set(itoRecords.map((r) => r.accountNumber));
 
     // STEP 7: Generate case IDs in bulk
     const caseIds = await Promise.all(data.map(() => generateUniqueCaseId()));
@@ -843,7 +853,10 @@ allEmployees.forEach(e => { empPhoneMap[e.name] = e.phoneNumber; });
       }
       if (!name || !accountNumber || !product || !requirement) {
         results.failed++;
-        results.failedRecords.push({ ...row, error: "Missing required fields" });
+        results.failedRecords.push({
+          ...row,
+          error: "Missing required fields",
+        });
         continue;
       }
 
@@ -855,25 +868,30 @@ allEmployees.forEach(e => { empPhoneMap[e.name] = e.phoneNumber; });
         continue;
       }
 
-
       // Resolve clientCode
 
       let resolvedClientCode = "";
-if (userId && clientId) {
-  if (!clientCodeUserMap[clientId]) {
-    results.failed++;
-    results.failedRecords.push({ ...row, error: `No user found with client code ${clientId}` });
-    continue;
-  }
-  resolvedClientCode = clientId;
-} else if (userId && !clientId) {
-  if (!userIdMap[userId]) {
-    results.failed++;
-    results.failedRecords.push({ ...row, error: `No user found with userId ${userId}` });
-    continue;
-  }
-  resolvedClientCode = userIdMap[userId].clientCode;   // ✅ fallback
-}
+      if (userId && clientId) {
+        if (!clientCodeUserMap[clientId]) {
+          results.failed++;
+          results.failedRecords.push({
+            ...row,
+            error: `No user found with client code ${clientId}`,
+          });
+          continue;
+        }
+        resolvedClientCode = clientId;
+      } else if (userId && !clientId) {
+        if (!userIdMap[userId]) {
+          results.failed++;
+          results.failedRecords.push({
+            ...row,
+            error: `No user found with userId ${userId}`,
+          });
+          continue;
+        }
+        resolvedClientCode = userIdMap[userId].clientCode; // ✅ fallback
+      }
 
       // let resolvedClientCode = "";
       // if (userId && clientId) {
@@ -901,18 +919,24 @@ if (userId && clientId) {
       fileDuplicateTracker.add(fileKey);
 
       // Add to dbKeys
-      dbKeys.push({ accountNumber, product, requirement, clientCode: resolvedClientCode });
+      dbKeys.push({
+        accountNumber,
+        product,
+        requirement,
+        clientCode: resolvedClientCode,
+      });
 
       // Build document
       const standardized = {
         upn: manualMapping?.correctUPN || "Not Mapped",
-        productType: manualMapping?.productType || "Not Mapped"
+        productType: manualMapping?.productType || "Not Mapped",
       };
 
-      const isITOduplicate = standardized.productType === "ITO" && itoSet.has(accountNumber);
+      const isITOduplicate =
+        standardized.productType === "ITO" && itoSet.has(accountNumber);
 
       const empName = clientCodeEmpMap[resolvedClientCode] || "";
-      
+
       const customerCare = empPhoneMap[empName] || "";
 
       const vendorName = vendorMap[normalizedProduct] || "not found";
@@ -941,14 +965,14 @@ if (userId && clientId) {
         ReferBy: ReferBy || "",
         isDedup: isITOduplicate,
         year: date.getFullYear().toString(),
-        month: (date.getMonth() + 1).toString().padStart(2, '0'),
-        ModifyedAt:''
+        month: (date.getMonth() + 1).toString().padStart(2, "0"),
+        ModifyedAt: "",
       });
     }
 
     // STEP 10: Preload existing same-day KYC records
     const existingRecords = await KYC.find({
-      $or: dbKeys.map(key => ({
+      $or: dbKeys.map((key) => ({
         accountNumber: key.accountNumber,
         product: key.product,
         requirement: key.requirement,
@@ -957,12 +981,15 @@ if (userId && clientId) {
           $gte: new Date(`${currentDate}T00:00:00Z`),
           $lt: new Date(`${currentDate}T23:59:59Z`),
         },
-      }))
+      })),
     }).lean();
 
-    const existingSet = new Set(existingRecords.map(
-      r => `${r.accountNumber}-${r.product}-${r.requirement}-${r.clientCode}`
-    ));
+    const existingSet = new Set(
+      existingRecords.map(
+        (r) =>
+          `${r.accountNumber}-${r.product}-${r.requirement}-${r.clientCode}`
+      )
+    );
 
     // STEP 11: Filter out dbDuplicates
     const bulkInsert = [];
@@ -993,7 +1020,6 @@ if (userId && clientId) {
         failedRecords: results.failedRecords,
       },
     });
-
   } catch (error) {
     console.error("Bulk Upload Error:", error);
     res.status(500).json({
@@ -1004,18 +1030,18 @@ if (userId && clientId) {
   }
 };
 
-
-
 const getS3FileBuffer = async (bucket, key) => {
-        const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-        const data = await s3.send(command); // `s3` is your S3Client instance
-        return streamToBuffer(data.Body);
-      };
+  const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+  const data = await s3.send(command); // `s3` is your S3Client instance
+  return streamToBuffer(data.Body);
+};
 // Step 1: Upload file to S3
 exports.uploadFile = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ success: false, message: "No file uploaded" });
+      return res
+        .status(400)
+        .json({ success: false, message: "No file uploaded" });
     }
 
     const { userId, clientId } = req.body;
@@ -1029,7 +1055,7 @@ exports.uploadFile = async (req, res) => {
       success: true,
       message: "File uploaded successfully",
       fileKey: req.file.key,
-      nextStep: `${process.env.BACKEND_URL}/kyc/extract-data/${req.file.key}`
+      nextStep: `${process.env.BACKEND_URL}/kyc/extract-data/${req.file.key}`,
     });
   } catch (error) {
     console.error("Upload error:", error);
@@ -1041,17 +1067,21 @@ exports.uploadFile = async (req, res) => {
 exports.extractData = async (req, res) => {
   try {
     const { fileKey } = req.params;
-    const { userId, clientId , ReferBy } = req.body;
+    const { userId, clientId, ReferBy } = req.body;
 
     // Get IP address
-    let ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    let ipAddress =
+      req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
     if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
       const ipResponse = await axios.get("https://api64.ipify.org?format=json");
       ipAddress = ipResponse.data.ip;
     }
 
     // Get file from S3
-    const fileBuffer = await getS3FileBuffer(process.env.AWS_BUCKET_NAME, fileKey);
+    const fileBuffer = await getS3FileBuffer(
+      process.env.AWS_BUCKET_NAME,
+      fileKey
+    );
     const workbook = XLSX.read(fileBuffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
@@ -1064,7 +1094,7 @@ exports.extractData = async (req, res) => {
       recordCount: jsonData.length,
       ipAddress,
       nextStep: `${process.env.BACKEND_URL}/kyc/process-records/${fileKey}`,
-      data: jsonData.slice(0, 5) // Sample of first 5 records for verification
+      data: jsonData.slice(0, 5), // Sample of first 5 records for verification
     });
   } catch (error) {
     console.error("Extraction error:", error);
@@ -1075,30 +1105,35 @@ exports.extractData = async (req, res) => {
 exports.processRecords = async (req, res) => {
   try {
     const { fileKey } = req.params;
-    const { userId, clientId, ipAddress,ReferBy } = req.body;
+    const { userId, clientId, ipAddress, ReferBy } = req.body;
     // console.log("ReferBy",ReferBy)
 
     // Validate userId
     if (!userId) {
-      return res.status(400).json({ success: false, message: "User ID is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "User ID is required" });
     }
 
     // Get file from S3 again
-    const fileBuffer = await getS3FileBuffer(process.env.AWS_BUCKET_NAME, fileKey);
+    const fileBuffer = await getS3FileBuffer(
+      process.env.AWS_BUCKET_NAME,
+      fileKey
+    );
     const workbook = XLSX.read(fileBuffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
     const currentDate = moment().format("YYYY-MM-DD");
-    
+
     // Process records in smaller chunks
     const batchSize = 50;
     const results = {
-      total:0,
+      total: 0,
       inserted: 0,
       duplicates: 0,
       failed: 0,
-      failedRecords: []
+      failedRecords: [],
     };
 
     // First validate client code
@@ -1106,36 +1141,36 @@ exports.processRecords = async (req, res) => {
     if (userId && clientId) {
       const user = await User.findOne({ clientCode: clientId });
       if (!user) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `No user found with client code ${clientId}` 
+        return res.status(400).json({
+          success: false,
+          message: `No user found with client code ${clientId}`,
         });
       }
       userclientcode = clientId;
     } else if (userId && !clientId) {
       const user = await User.findOne({ userId: userId });
       if (!user) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `No user found with userId ${userId}` 
+        return res.status(400).json({
+          success: false,
+          message: `No user found with userId ${userId}`,
         });
       }
       userclientcode = user.clientCode;
     }
 
-    results.total = jsonData.length
+    results.total = jsonData.length;
     for (let i = 0; i < jsonData.length; i += batchSize) {
       const batch = jsonData.slice(i, i + batchSize);
       const batchResults = await processBatch(
-        batch, 
-        userId, 
-        userclientcode, 
-        ipAddress, 
+        batch,
+        userId,
+        userclientcode,
+        ipAddress,
         currentDate,
         ReferBy,
         userclientcode
       );
-      
+
       results.inserted += batchResults.inserted;
       results.duplicates += batchResults.duplicates;
       results.failed += batchResults.failed;
@@ -1145,25 +1180,34 @@ exports.processRecords = async (req, res) => {
     res.json({
       success: true,
       message: "Records processed successfully",
-      results
+      results,
     });
   } catch (error) {
     console.error("Processing error:", error);
-    res.status(500).json({ success: false, message: "Record processing failed" });
+    res
+      .status(500)
+      .json({ success: false, message: "Record processing failed" });
   }
 };
 
-async function processBatch(batch, userId, userclientcode, ipAddress, currentDate,ReferBy,userclientcode) {
+async function processBatch(
+  batch,
+  userId,
+  userclientcode,
+  ipAddress,
+  currentDate,
+  ReferBy,
+  userclientcode
+) {
   const results = {
     inserted: 0,
     duplicates: 0,
     failed: 0,
-    failedRecords: []
+    failedRecords: [],
   };
 
-  let manualMapping = ''
-  let normalizedProduct = ''
-  
+  let manualMapping = "";
+  let normalizedProduct = "";
 
   // Get employee details once per batch
   const employees = await ClientCode.find({ clientCode: userclientcode });
@@ -1187,13 +1231,14 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
         results.failed++;
         results.failedRecords.push({
           row,
-          error: "Missing required fields"
+          error: "Missing required fields",
         });
         continue;
       }
       normalizedProduct = normalizeProductName(product);
-      manualMapping = await RevisedProduct.findOne({ productName:normalizedProduct });
-      
+      manualMapping = await RevisedProduct.findOne({
+        productName: normalizedProduct,
+      });
 
       if (!manualMapping) {
         results.failed++;
@@ -1206,11 +1251,11 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
         accountNumber,
         product,
         requirement,
-        clientCode:userclientcode,
+        clientCode: userclientcode,
         createdAt: {
           $gte: new Date(`${currentDate}T00:00:00Z`),
           $lt: new Date(`${currentDate}T23:59:59Z`),
-        }
+        },
       });
 
       if (exists) {
@@ -1219,7 +1264,7 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
       }
 
       // Standardize product name
-    let standardized = {};
+      let standardized = {};
       if (manualMapping) {
         standardized = {
           upn: manualMapping.correctUPN,
@@ -1227,32 +1272,34 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
         };
       } else {
         standardized = {
-        upn: "Not Mapped",
-        productType: "Not Mapped",
+          upn: "Not Mapped",
+          productType: "Not Mapped",
         };
       }
 
-      let isduplicate = false
-    if(standardized.productType === "ITO"){
-
-    const existingKYCRecords = await KYC.find({ accountNumber, product:normalizedProduct });
-    if (existingKYCRecords.length > 0) {
-      isduplicate = true
-    for (const record of existingKYCRecords) {
-    record.isDedup = true;
-    await record.save(); 
-  }
-}
-    }
+      let isduplicate = false;
+      if (standardized.productType === "ITO") {
+        const existingKYCRecords = await KYC.find({
+          accountNumber,
+          product: normalizedProduct,
+        });
+        if (existingKYCRecords.length > 0) {
+          isduplicate = true;
+          for (const record of existingKYCRecords) {
+            record.isDedup = true;
+            await record.save();
+          }
+        }
+      }
 
       // Get vendor
       const vendor = await Allvendors.findOne({
-      productName: normalizedProduct,
-      vendorType: 'default'
-   });
-    
-    const vandorname = vendor?.vendorName || "not found";
-    const uniqueCaseId = await generateUniqueCaseId()
+        productName: normalizedProduct,
+        vendorType: "default",
+      });
+
+      const vandorname = vendor?.vendorName || "not found";
+      const uniqueCaseId = await generateUniqueCaseId();
 
       // Create new record
       await KYC.create({
@@ -1275,11 +1322,11 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
         customerCare,
         NameUploadBy: userId,
         ipAddress,
-        ReferBy:ReferBy || "",
+        ReferBy: ReferBy || "",
         year: new Date().getFullYear().toString(),
-        month: (new Date().getMonth() + 1).toString().padStart(2, '0'),
-        isDedup:isduplicate,
-        ModifyedAt:''
+        month: (new Date().getMonth() + 1).toString().padStart(2, "0"),
+        isDedup: isduplicate,
+        ModifyedAt: "",
       });
 
       results.inserted++;
@@ -1288,7 +1335,7 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
       results.failed++;
       results.failedRecords.push({
         row,
-        error: error.message
+        error: error.message,
       });
     }
   }
@@ -1296,26 +1343,22 @@ async function processBatch(batch, userId, userclientcode, ipAddress, currentDat
   return results;
 }
 
-
-
-
 //////////////////////***************************////////////////////////////////
-
 
 // Helper function to order fields
 function orderFields(document, fieldOrder) {
   if (!document) return document;
-  
+
   const orderedDoc = {};
   const doc = document.toObject ? document.toObject() : document;
 
-  fieldOrder.forEach(field => {
+  fieldOrder.forEach((field) => {
     if (doc[field] !== undefined) {
       orderedDoc[field] = doc[field];
     }
   });
 
-  Object.keys(doc).forEach(field => {
+  Object.keys(doc).forEach((field) => {
     if (!orderedDoc[field] && !fieldOrder.includes(field)) {
       orderedDoc[field] = doc[field];
     }
@@ -1329,16 +1372,18 @@ exports.getAvailableColumns = async (req, res) => {
   try {
     // Get all fields from schema except internal ones
     const schemaFields = Object.keys(KYC.schema.paths).filter(
-      field => !['_id', '__v', 'createdAt', 'updatedAt'].includes(field)
+      (field) => !["_id", "__v", "updatedAt"].includes(field)
     );
-    
-    res.json({ 
-      success: true, 
-      columns: schemaFields 
+
+    res.json({
+      success: true,
+      columns: schemaFields,
     });
   } catch (error) {
     console.error("Error fetching available columns:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch columns" });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch columns" });
   }
 };
 
@@ -1346,23 +1391,23 @@ exports.getAvailableColumns = async (req, res) => {
 exports.getColumnConfig = async (req, res) => {
   try {
     const { role } = req.params;
-    
+
     const config = await ColumnConfig.findOne({ role });
-    
+
     if (!config) {
       // Return default order if no config exists
       const schemaFields = Object.keys(KYC.schema.paths).filter(
-        field => !['_id', '__v', 'createdAt', 'updatedAt'].includes(field)
+        (field) => !["_id", "__v", "createdAt", "updatedAt"].includes(field)
       );
-      return res.json({ 
-        success: true, 
-        config: { 
-          role, 
-          columnOrder: schemaFields 
-        } 
+      return res.json({
+        success: true,
+        config: {
+          role,
+          columnOrder: schemaFields,
+        },
       });
     }
-    
+
     res.json({ success: true, config });
   } catch (error) {
     console.error("Error fetching column config:", error);
@@ -1375,35 +1420,37 @@ exports.updateColumnConfig = async (req, res) => {
   try {
     const { role } = req.params;
     const { columnOrder } = req.body;
-    
+
     if (!Array.isArray(columnOrder)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "columnOrder must be an array" 
+      return res.status(400).json({
+        success: false,
+        message: "columnOrder must be an array",
       });
     }
-    
+
     const config = await ColumnConfig.findOneAndUpdate(
       { role },
       { columnOrder, updatedAt: Date.now() },
       { new: true, upsert: true }
     );
-    
+
     res.json({ success: true, config });
   } catch (error) {
     console.error("Error updating column config:", error);
-    res.status(500).json({ success: false, message: "Failed to update config" });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to update config" });
   }
 };
 
 // Updated getTrackerData function using column config
 exports.getTrackerData = async (req, res) => {
   try {
-    const { 
-      role, 
-      userId, 
-      name, 
-      page = 1, 
+    const {
+      role,
+      userId,
+      name,
+      page = 1,
       pageSize = 50,
       searchQuery = "",
       // Filter parameters
@@ -1420,91 +1467,90 @@ exports.getTrackerData = async (req, res) => {
       priority,
       clientType,
       clientCode,
-       ...filters
+      ...filters
     } = req.query;
-    
+
     const skip = (page - 1) * pageSize;
 
     // In your server endpoint, before the query
 
+    // After building the query
 
-// After building the query
-    
     // Get column order for this role
     const config = await ColumnConfig.findOne({ role });
     let columnOrder = config?.columnOrder;
-    
+
     if (!columnOrder) {
       // Fallback to all fields if no config exists
       columnOrder = Object.keys(KYC.schema.paths).filter(
-        field => !['_id', '__v', 'createdAt','userId', 'updatedAt'].includes(field)
+        (field) =>
+          !["_id", "__v", "createdAt", "userId", "updatedAt"].includes(field)
       );
     }
-    
+
     // Build projection based on column order
     const projection = {};
-    columnOrder.forEach(field => {
+    columnOrder.forEach((field) => {
       projection[field] = 1;
     });
     projection._id = 0;
-    
+
     let query = {};
-    
+
     // Search functionality
     if (searchQuery) {
-  const regex = { $regex: searchQuery, $options: "i" };
+      const regex = { $regex: searchQuery, $options: "i" };
 
-  query.$or = [
-    { caseId: regex },
-    { userId: regex },
-    { remarks: regex },
-    { name: regex },
-    { details: regex },
-    { details1: regex },
-    { priority: regex },
-    { correctUPN: regex },
-    { product: regex },
-    { updatedProductName: regex },
-    { accountNumber: regex },
-    { requirement: regex },
-    { updatedRequirement: regex },
-    { accountNumberDigit: regex },
-    { bankCode: regex },
-    { clientCode: regex },
-    { vendorName: regex },
-    { dateIn: regex },
-    { dateInDate: regex },
-    { status: regex },
-    { caseStatus: regex },
-    { productType: regex },
-    { listByEmployee: regex },
-    { dateOut: regex },
-    { dateOutInDay: regex },
-    { sentBy: regex },
-    { autoOrManual: regex },
-    { caseDoneBy: regex },
-    { clientTAT: regex },
-    { customerCare: regex },
-    { sentDate: regex },
-    { sentDateInDay: regex },
-    { clientType: regex },
-    { dedupBy: regex },
-    { vendorRate: regex },
-    { clientRate: regex },
-    { NameUploadBy: regex },
-    { ReferBy: regex },
-    { ipAddress: regex },
-    { vendorStatus: regex },
-    { year: regex },
-    { month: regex },
-    { role: regex },
-    { "attachments.filename": regex },
-    { "attachments.originalname": regex },
-    { "attachments.key": regex }
-  ];
-}
+      query.$or = [
+        { caseId: regex },
+        { userId: regex },
+        { remarks: regex },
+        { name: regex },
+        { details: regex },
+        { details1: regex },
+        { priority: regex },
+        { correctUPN: regex },
+        { product: regex },
+        { updatedProductName: regex },
+        { accountNumber: regex },
+        { requirement: regex },
+        { updatedRequirement: regex },
+        { accountNumberDigit: regex },
+        { bankCode: regex },
+        { clientCode: regex },
+        { vendorName: regex },
+        { dateIn: regex },
+        { dateInDate: regex },
+        { status: regex },
+        { caseStatus: regex },
+        { productType: regex },
+        { listByEmployee: regex },
+        { dateOut: regex },
+        { dateOutInDay: regex },
+        { sentBy: regex },
+        { autoOrManual: regex },
+        { caseDoneBy: regex },
+        { clientTAT: regex },
+        { customerCare: regex },
+        { sentDate: regex },
+        { sentDateInDay: regex },
+        { clientType: regex },
+        { dedupBy: regex },
+        { vendorRate: regex },
+        { clientRate: regex },
+        { NameUploadBy: regex },
+        { ReferBy: regex },
+        { ipAddress: regex },
+        { vendorStatus: regex },
+        { year: regex },
+        { month: regex },
+        { role: regex },
+        { "attachments.filename": regex },
+        { "attachments.originalname": regex },
+        { "attachments.key": regex },
+      ];
+    }
 
-    
     // Apply filters
     if (product) query.product = product;
     if (productType) query.productType = productType;
@@ -1515,239 +1561,254 @@ exports.getTrackerData = async (req, res) => {
     if (clientCode) query.clientCode = clientCode;
     if (clientType) query.clientType = clientType;
 
-// Enhanced date filtering with debugging
-// Enhanced dateIn filtering
-if (dateInStart || dateInEnd) {
-  const dateInFilter = {};
-  
-  const startDateStr = dateInStart ? moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
-  const endDateStr = dateInEnd ? moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+    // Enhanced date filtering with debugging
+    // Enhanced dateIn filtering
+    if (dateInStart || dateInEnd) {
+      const dateInFilter = {};
 
-  if (startDateStr && endDateStr) {
-    if (startDateStr === endDateStr) {
-      dateInFilter.$regex = `^${startDateStr}`;
-    } else {
-      // For range queries, use regex to match the date part only
-      dateInFilter.$regex = new RegExp(`^(${generateDateRangeRegex(startDateStr, endDateStr)})`);
+      const startDateStr = dateInStart
+        ? moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY")
+        : null;
+      const endDateStr = dateInEnd
+        ? moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY")
+        : null;
+
+      if (startDateStr && endDateStr) {
+        if (startDateStr === endDateStr) {
+          dateInFilter.$regex = `^${startDateStr}`;
+        } else {
+          // For range queries, use regex to match the date part only
+          dateInFilter.$regex = new RegExp(
+            `^(${generateDateRangeRegex(startDateStr, endDateStr)})`
+          );
+        }
+      } else if (startDateStr) {
+        dateInFilter.$regex = `^${startDateStr}`;
+      } else if (endDateStr) {
+        dateInFilter.$regex = new RegExp(
+          `^(${generateDateRangeRegex("01-01-2000", endDateStr)})`
+        );
+      }
+
+      if (Object.keys(dateInFilter).length > 0) {
+        query.dateIn = dateInFilter;
+      }
     }
-  } else if (startDateStr) {
-    dateInFilter.$regex = `^${startDateStr}`;
-  } else if (endDateStr) {
-    dateInFilter.$regex = new RegExp(`^(${generateDateRangeRegex('01-01-2000', endDateStr)})`);
-  }
 
-  if (Object.keys(dateInFilter).length > 0) {
-    query.dateIn = dateInFilter;
-  }
-}
+    // Enhanced dateOut filtering
+    if (dateOutStart || dateOutEnd) {
+      const dateOutFilter = {};
 
-// Enhanced dateOut filtering
-if (dateOutStart || dateOutEnd) {
-  const dateOutFilter = {};
-  
-  const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
-  const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+      const startDateStr = dateOutStart
+        ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY")
+        : null;
+      const endDateStr = dateOutEnd
+        ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY")
+        : null;
 
-  if (startDateStr && endDateStr) {
-    if (startDateStr === endDateStr) {
-      dateOutFilter.$regex = `^${startDateStr}`;
-    } else {
-      // For range queries, use regex to match the date part only
-      dateOutFilter.$regex = new RegExp(`^(${generateDateRangeRegex(startDateStr, endDateStr)})`);
+      if (startDateStr && endDateStr) {
+        if (startDateStr === endDateStr) {
+          dateOutFilter.$regex = `^${startDateStr}`;
+        } else {
+          // For range queries, use regex to match the date part only
+          dateOutFilter.$regex = new RegExp(
+            `^(${generateDateRangeRegex(startDateStr, endDateStr)})`
+          );
+        }
+      } else if (startDateStr) {
+        dateOutFilter.$regex = `^${startDateStr}`;
+      } else if (endDateStr) {
+        dateOutFilter.$regex = new RegExp(
+          `^(${generateDateRangeRegex("01-01-2000", endDateStr)})`
+        );
+      }
+
+      if (Object.keys(dateOutFilter).length > 0) {
+        query.dateOut = {
+          ...dateOutFilter,
+          $ne: "",
+          $exists: true,
+        };
+      }
     }
-  } else if (startDateStr) {
-    dateOutFilter.$regex = `^${startDateStr}`;
-  } else if (endDateStr) {
-    dateOutFilter.$regex = new RegExp(`^(${generateDateRangeRegex('01-01-2000', endDateStr)})`);
-  }
 
-  if (Object.keys(dateOutFilter).length > 0) {
-    query.dateOut = {
-      ...dateOutFilter,
-      $ne: "",
-      $exists: true
-    };
-  }
-}
+    // Helper function to generate regex for date range
+    function generateDateRangeRegex(startDate, endDate) {
+      const start = moment(startDate, "DD-MM-YYYY");
+      const end = moment(endDate, "DD-MM-YYYY");
+      const dates = [];
 
-// Helper function to generate regex for date range
-function generateDateRangeRegex(startDate, endDate) {
-  const start = moment(startDate, "DD-MM-YYYY");
-  const end = moment(endDate, "DD-MM-YYYY");
-  const dates = [];
-  
-  let current = start.clone();
-  while (current <= end) {
-    dates.push(current.format("DD-MM-YYYY"));
-    current.add(1, 'day');
-  }
-  
-  return dates.join("|");
-}
-//  if (dateInStart || dateInEnd) {
-//       if (dateInStart && dateInEnd) {
-//         // RANGE QUERY - handle as string comparison
-//         const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
-//         const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
-        
-//         if (startDate === endDate) {
-//           query.dateIn = { $regex: `^${startDate}` };
-//         } else {
-          
-//           query.$and = [
-//             { 
-//               dateIn: { 
-//                 $gte: `${startDate}, 00:00:00 AM`,
-//                 $lte: `${endDate}, 11:59:59 PM`
-//               }
-//             }
-//           ];
-//         }
-//       }
-//       else if (dateInStart) {
-        
-//         const dateStr = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
-//         query.dateIn = { $regex: `^${dateStr}` };
-//       }
-//       else if (dateInEnd) {
-        
-//         const dateStr = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
-//         query.dateIn = { $lte: `${dateStr}, 11:59:59 PM` };
-//       }
-//     }
+      let current = start.clone();
+      while (current <= end) {
+        dates.push(current.format("DD-MM-YYYY"));
+        current.add(1, "day");
+      }
 
-    
-//     if (dateOutStart || dateOutEnd) {
-//   // Initialize dateOut filter object
-//   const dateOutFilter = {};
-  
-//   // Format dates consistently
-//   const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
-//   const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+      return dates.join("|");
+    }
+    //  if (dateInStart || dateInEnd) {
+    //       if (dateInStart && dateInEnd) {
+    //         // RANGE QUERY - handle as string comparison
+    //         const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+    //         const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
 
-//   // Case 1: Both start and end dates provided
-//   if (startDateStr && endDateStr) {
-//     if (startDateStr === endDateStr) {
-//       // Single day match - use regex for exact day
-//       dateOutFilter.$regex = `^${startDateStr}`;
-//     } else {
-//       // Date range - use string comparison
-//       dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
-//       dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
-//     }
-//   }
-//   // Case 2: Only start date provided
-//   else if (startDateStr) {
-//     dateOutFilter.$regex = `^${startDateStr}`;
-//   }
-//   // Case 3: Only end date provided
-//   else if (endDateStr) {
-//     dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
-//   }
+    //         if (startDate === endDate) {
+    //           query.dateIn = { $regex: `^${startDate}` };
+    //         } else {
 
-//   // Only apply the filter if we have valid conditions
-//   if (Object.keys(dateOutFilter).length > 0) {
-//     // Exclude empty dateOut values and apply the filter
-//     query.dateOut = {
-//       ...dateOutFilter,
-//       $ne: "", // Exclude empty values
-//       $exists: true // Ensure field exists
-//     };
+    //           query.$and = [
+    //             {
+    //               dateIn: {
+    //                 $gte: `${startDate}, 00:00:00 AM`,
+    //                 $lte: `${endDate}, 11:59:59 PM`
+    //               }
+    //             }
+    //           ];
+    //         }
+    //       }
+    //       else if (dateInStart) {
 
-//     // For range queries, we need to ensure we don't match invalid date strings
-//     if (dateOutFilter.$gte || dateOutFilter.$lte) {
-//       query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
-//     }
-//   }
-// }
+    //         const dateStr = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+    //         query.dateIn = { $regex: `^${dateStr}` };
+    //       }
+    //       else if (dateInEnd) {
 
+    //         const dateStr = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+    //         query.dateIn = { $lte: `${dateStr}, 11:59:59 PM` };
+    //       }
+    //     }
 
-Object.entries(filters).forEach(([key, value]) => {
-  if (Array.isArray(value) && value.length > 0) {
-    query[key] = { $in: value };
-  }
-});
+    //     if (dateOutStart || dateOutEnd) {
+    //   // Initialize dateOut filter object
+    //   const dateOutFilter = {};
+
+    //   // Format dates consistently
+    //   const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+    //   const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+
+    //   // Case 1: Both start and end dates provided
+    //   if (startDateStr && endDateStr) {
+    //     if (startDateStr === endDateStr) {
+    //       // Single day match - use regex for exact day
+    //       dateOutFilter.$regex = `^${startDateStr}`;
+    //     } else {
+    //       // Date range - use string comparison
+    //       dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
+    //       dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+    //     }
+    //   }
+    //   // Case 2: Only start date provided
+    //   else if (startDateStr) {
+    //     dateOutFilter.$regex = `^${startDateStr}`;
+    //   }
+    //   // Case 3: Only end date provided
+    //   else if (endDateStr) {
+    //     dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+    //   }
+
+    //   // Only apply the filter if we have valid conditions
+    //   if (Object.keys(dateOutFilter).length > 0) {
+    //     // Exclude empty dateOut values and apply the filter
+    //     query.dateOut = {
+    //       ...dateOutFilter,
+    //       $ne: "", // Exclude empty values
+    //       $exists: true // Ensure field exists
+    //     };
+
+    //     // For range queries, we need to ensure we don't match invalid date strings
+    //     if (dateOutFilter.$gte || dateOutFilter.$lte) {
+    //       query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
+    //     }
+    //   }
+    // }
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (Array.isArray(value) && value.length > 0) {
+        query[key] = { $in: value };
+      }
+    });
 
     if (sentDate) {
       query.sentDate = {
         $regex: `^${sentDate}`,
-        $options: 'i'
+        $options: "i",
       };
     }
-    
+
     if (role === "admin") {
-      
     } else if (role === "employee") {
       query.listByEmployee = name;
     } else if (role === "client") {
       const user = await User.findOne({ userId });
       if (!user) {
-        return res.status(404).json({ success: false, message: "User not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
       }
 
       query = {
-    $and: [
-      query, 
-      {
-        $or: [
-          { userId: user.userId },
-          { clientCode: user.clientCode }
-        ]
-      }
-    ]
-  };
-      
+        $and: [
+          query,
+          {
+            $or: [{ userId: user.userId }, { clientCode: user.clientCode }],
+          },
+        ],
+      };
     } else {
-      return res.status(400).json({ success: false, message: "Invalid role specified" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid role specified" });
     }
     // console.log("query:",query)
     const [trackerData, totalCount] = await Promise.all([
-      KYC.find(query, projection,filters)
+      KYC.find(query, projection, filters)
         .sort({ _id: -1 })
         .skip(skip)
         .limit(parseInt(pageSize)),
-      KYC.countDocuments(query)
+      KYC.countDocuments(query),
     ]);
-    
-    const orderedData = trackerData.map(doc => orderFields(doc, columnOrder));
-    
+
+    const orderedData = trackerData.map((doc) => orderFields(doc, columnOrder));
+
     // Include editable columns if needed
     if (role === "employee") {
-      const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
+      const employeeAccess = await EmployeeAccess.findOne({
+        employeeName: name,
+      });
       const editableColumns = employeeAccess?.editableColumns || [];
-      return res.json({ 
-        data: orderedData, 
+      return res.json({
+        data: orderedData,
         editableColumns,
         pagination: {
           total: totalCount,
           page: parseInt(page),
           pageSize: parseInt(pageSize),
-          totalPages: Math.ceil(totalCount / pageSize)
-        }
+          totalPages: Math.ceil(totalCount / pageSize),
+        },
       });
     } else if (role === "client") {
       const clientAccess = await ClientAccess.findOne({ clientName: name });
       const editableColumns = clientAccess?.editableColumns || [];
-      return res.json({ 
-        data: orderedData, 
+      return res.json({
+        data: orderedData,
         editableColumns,
         pagination: {
           total: totalCount,
           page: parseInt(page),
           pageSize: parseInt(pageSize),
-          totalPages: Math.ceil(totalCount / pageSize)
-        }
+          totalPages: Math.ceil(totalCount / pageSize),
+        },
       });
     }
-    
+
     res.json({
       data: orderedData,
       pagination: {
         total: totalCount,
         page: parseInt(page),
         pageSize: parseInt(pageSize),
-        totalPages: Math.ceil(totalCount / pageSize)
-      }
+        totalPages: Math.ceil(totalCount / pageSize),
+      },
     });
   } catch (error) {
     console.error("Error fetching tracker data:", error);
@@ -1756,11 +1817,11 @@ Object.entries(filters).forEach(([key, value]) => {
 };
 // exports.getTrackerData = async (req, res) => {
 //   try {
-//     const { 
-//       role, 
-//       userId, 
-//       name, 
-//       page = 1, 
+//     const {
+//       role,
+//       userId,
+//       name,
+//       page = 1,
 //       pageSize = 50,
 //       searchQuery = "",
 //       // Filter parameters
@@ -1777,29 +1838,29 @@ Object.entries(filters).forEach(([key, value]) => {
 //       priority,
 //       clientType
 //     } = req.query;
-    
+
 //     const skip = (page - 1) * pageSize;
-    
+
 //     // Get column order for this role
 //     const config = await ColumnConfig.findOne({ role });
 //     let columnOrder = config?.columnOrder;
-    
+
 //     if (!columnOrder) {
 //       // Fallback to all fields if no config exists
 //       columnOrder = Object.keys(KYC.schema.paths).filter(
 //         field => !['_id', '__v', 'createdAt','userId', 'updatedAt'].includes(field)
 //       );
 //     }
-    
+
 //     // Build projection based on column order
 //     const projection = {};
 //     columnOrder.forEach(field => {
 //       projection[field] = 1;
 //     });
 //     projection._id = 0;
-    
+
 //     let query = {};
-    
+
 //     // Search functionality
 //     if (searchQuery) {
 //       query.$or = [
@@ -1812,7 +1873,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //         { remarks: { $regex: searchQuery, $options: 'i' } }
 //       ];
 //     }
-    
+
 //     // Apply filters
 //     if (product) query.product = product;
 //     if (productType) query.productType = productType;
@@ -1821,7 +1882,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //     if (vendorStatus) query.vendorStatus = vendorStatus;
 //     if (priority) query.priority = priority;
 //     if (clientType) query.clientType = clientType;
-    
+
 //     // Date range filters
 //     if (dateInStart || dateInEnd) {
 //       query.dateIn = {};
@@ -1832,7 +1893,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //         query.dateIn.$lte = moment(dateInEnd, "DD-MM-YYYY").endOf('day').toDate();
 //       }
 //     }
-    
+
 //     if (dateOutStart || dateOutEnd) {
 //       query.dateOut = {};
 //       if (dateOutStart) {
@@ -1842,14 +1903,14 @@ Object.entries(filters).forEach(([key, value]) => {
 //         query.dateOut.$lte = moment(dateOutEnd, "DD-MM-YYYY").endOf('day').toDate();
 //       }
 //     }
-    
+
 //     if (sentDate) {
 //       query.sentDate = {
 //         $regex: `^${sentDate}`,
 //         $options: 'i'
 //       };
 //     }
-    
+
 //     // Role-based query conditions
 //     if (role === "admin") {
 //       // No additional filters for admin
@@ -1860,7 +1921,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //       if (!user) {
 //         return res.status(404).json({ success: false, message: "User not found" });
 //       }
-      
+
 //       query = {
 //         $or: [
 //           { userId: user.userId },
@@ -1870,7 +1931,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //     } else {
 //       return res.status(400).json({ success: false, message: "Invalid role specified" });
 //     }
-    
+
 //     const [trackerData, totalCount] = await Promise.all([
 //       KYC.find(query, projection)
 //         .sort({ _id: -1 })
@@ -1878,15 +1939,15 @@ Object.entries(filters).forEach(([key, value]) => {
 //         .limit(parseInt(pageSize)),
 //       KYC.countDocuments(query)
 //     ]);
-    
+
 //     const orderedData = trackerData.map(doc => orderFields(doc, columnOrder));
-    
+
 //     // Include editable columns if needed
 //     if (role === "employee") {
 //       const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
 //       const editableColumns = employeeAccess?.editableColumns || [];
-//       return res.json({ 
-//         data: orderedData, 
+//       return res.json({
+//         data: orderedData,
 //         editableColumns,
 //         pagination: {
 //           total: totalCount,
@@ -1898,8 +1959,8 @@ Object.entries(filters).forEach(([key, value]) => {
 //     } else if (role === "client") {
 //       const clientAccess = await ClientAccess.findOne({ clientName: name });
 //       const editableColumns = clientAccess?.editableColumns || [];
-//       return res.json({ 
-//         data: orderedData, 
+//       return res.json({
+//         data: orderedData,
 //         editableColumns,
 //         pagination: {
 //           total: totalCount,
@@ -1909,7 +1970,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //         }
 //       });
 //     }
-    
+
 //     res.json({
 //       data: orderedData,
 //       pagination: {
@@ -1928,28 +1989,28 @@ Object.entries(filters).forEach(([key, value]) => {
 //   try {
 //     const { role, userId, name , page = 1, pageSize = 50} = req.query;
 //     const skip = (page - 1) * pageSize;
-    
+
 //     // Get column order for this role
 //     const config = await ColumnConfig.findOne({ role });
 //     let columnOrder = config?.columnOrder;
-    
+
 //     if (!columnOrder) {
 //       // Fallback to all fields if no config exists
 //       columnOrder = Object.keys(KYC.schema.paths).filter(
 //         field => !['_id', '__v', 'createdAt','userId', 'updatedAt'].includes(field)
 //       );
 //     }
-    
+
 //     // Build projection based on column order
 //     const projection = {};
 //     columnOrder.forEach(field => {
 //       projection[field] = 1;
 //     });
 //     projection._id = 0;
-    
+
 //     let query = {};
 //     let populateOptions = [];
-    
+
 //     if (role === "admin") {
 //       // No additional query filters for admin
 //       populateOptions = [{ path: "userId", select: "name email phoneNumber userId" }];
@@ -1960,19 +2021,19 @@ Object.entries(filters).forEach(([key, value]) => {
 //       if (!user) {
 //         return res.status(404).json({ success: false, message: "User not found" });
 //       }
-      
+
 //       query = {
 //         $or: [
 //           { userId: user.userId },
 //           { clientCode: user.clientCode }
 //         ]
 //       };
-      
+
 //       populateOptions = [{ path: "userId", select: "name email phoneNumber userId" }];
 //     } else {
 //       return res.status(400).json({ success: false, message: "Invalid role specified" });
 //     }
-    
+
 //     // const trackerData = await KYC.find(query, projection)
 //     //   .populate(...populateOptions)
 //     //   .sort({ _id: -1 });
@@ -1985,9 +2046,9 @@ Object.entries(filters).forEach(([key, value]) => {
 //         .limit(parseInt(pageSize)),
 //       KYC.countDocuments(query)
 //     ]);
-    
+
 //     const orderedData = trackerData.map(doc => orderFields(doc, columnOrder));
-    
+
 //     // Include editable columns if needed
 //     if (role === "employee") {
 //       const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
@@ -1998,7 +2059,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //       const editableColumns = clientAccess?.editableColumns || [];
 //       return res.json({ data: orderedData, editableColumns });
 //     }
-    
+
 //     // res.json(orderedData);
 //     res.json({
 //       data: orderedData,
@@ -2069,7 +2130,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //     'updatedProductName',
 //     'accountNumber',
 //     'requirement',
-    
+
 //     'accountNumberDigit',
 //     'bankCode',
 //     'clientCode',
@@ -2109,12 +2170,12 @@ Object.entries(filters).forEach(([key, value]) => {
 //     'updatedProductName',
 //     'accountNumber',
 //     'requirement',
-    
+
 //     'clientCode',
 //     'dateIn',
 //     'dateInDate',
 //     'status',
-    
+
 //     'caseStatus',
 //     'productType',
 //     'listByEmployee',
@@ -2139,8 +2200,6 @@ Object.entries(filters).forEach(([key, value]) => {
 //   try {
 //     const { role, userId, name } = req.query;
 
-    
-    
 //     let projection = {};
 
 //     if (role === "admin") {
@@ -2159,7 +2218,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //         updatedProductName: 1,
 //         accountNumber: 1,
 //         requirement: 1,
-        
+
 //         accountNumberDigit: 1,
 //         bankCode: 1,
 //         clientCode: 1,
@@ -2212,7 +2271,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //         updatedProductName: 1,
 //         accountNumber: 1,
 //         requirement: 1,
-        
+
 //         accountNumberDigit: 1,
 //         bankCode: 1,
 //         clientCode: 1,
@@ -2264,7 +2323,7 @@ Object.entries(filters).forEach(([key, value]) => {
 //         updatedProductName: 1,
 //         accountNumber: 1,
 //         requirement: 1,
-        
+
 //         clientCode: 1,
 //         dateIn: 1,
 //         status: 1,
@@ -2298,8 +2357,8 @@ Object.entries(filters).forEach(([key, value]) => {
 
 //       const trackerData = await KYC.find({
 //     $or: [
-//     { userId: user.userId },       
-//     { clientCode: user.clientCode } 
+//     { userId: user.userId },
+//     { clientCode: user.clientCode }
 //   ]
 // }, projection)
 //         .populate("userId", "name email phoneNumber userId")
@@ -2367,93 +2426,100 @@ exports.updateTrackerData = async (req, res) => {
     if (!Array.isArray(updatedData)) {
       return res.status(400).json({
         success: false,
-        message: "Expected array of updates"
+        message: "Expected array of updates",
       });
     }
 
-    const results = await Promise.all(updatedData.map(async (update) => {
-      // Validate required fields
-      const { caseId, changedField, userId, userName } = update;
-      const newValue = update[changedField];
-      
-      if (!caseId || !changedField || newValue === undefined) {
-        throw new Error(`Invalid update format: ${JSON.stringify(update)}`);
-      }
+    const results = await Promise.all(
+      updatedData.map(async (update) => {
+        // Validate required fields
+        const { caseId, changedField, userId, userName } = update;
+        const newValue = update[changedField];
 
-      if (!userId || !userName) {
-        throw new Error("User information missing in update");
-      }
-
-      // Validate vendor name if updating vendorName field
-      if (changedField === 'vendorName') {
-        const vendorExists = await Vendor.exists({ vendorName: newValue });
-        if (!vendorExists) {
-          throw new Error(`Vendor '${newValue}' not found in database`);
+        if (!caseId || !changedField || newValue === undefined) {
+          throw new Error(`Invalid update format: ${JSON.stringify(update)}`);
         }
-      }
 
-      // Validate employee name if updating listByEmployee field
-      if (changedField === 'listByEmployee') {
-        const employeeExists = await ClientCode.exists({ EmployeeName: newValue });
-        if (!employeeExists) {
-          throw new Error(`Employee '${newValue}' not found in database`);
+        if (!userId || !userName) {
+          throw new Error("User information missing in update");
         }
-      }
 
-      // Prepare update payload
-      const updatePayload = {
-        [changedField]: newValue,
-        updatedAt: getFormattedDateTime(),
-        ModifyedAt:getFormattedDateTime(),
-        updatedBy: userName,
-        updatedById: userId
-      };
-
-      // Special field handling
-      if (changedField === 'status' && newValue === "Closed") {
-        updatePayload.dateOut = getFormattedDateTime();
-        updatePayload.caseDoneBy = userName;
-        
-        const doc = await KYC.findOne({ caseId });
-        if (doc?.dateIn) {
-          updatePayload.clientTAT = calculateTAT(
-            parseCustomDateTime(doc.dateIn),
-            updatePayload.dateOut
-          );
+        // Validate vendor name if updating vendorName field
+        if (changedField === "vendorName") {
+          const vendorExists = await Vendor.exists({ vendorName: newValue });
+          if (!vendorExists) {
+            throw new Error(`Vendor '${newValue}' not found in database`);
+          }
         }
-      }
 
-      if (changedField === 'caseStatus' && newValue === "Sent") {
-        updatePayload.sentDate = getFormattedDateTime();
-        updatePayload.sentBy = userName;
-      }
+        // Validate employee name if updating listByEmployee field
+        if (changedField === "listByEmployee") {
+          const employeeExists = await ClientCode.exists({
+            EmployeeName: newValue,
+          });
+          if (!employeeExists) {
+            throw new Error(`Employee '${newValue}' not found in database`);
+          }
+        }
 
-      // Apply update
-      const updatedDoc = await KYC.findOneAndUpdate(
-        { caseId },
-        { $set: updatePayload },
-        { new: true, runValidators: true }
-      );
+        // Prepare update payload
+        const updatePayload = {
+          [changedField]: newValue,
+          updatedAt: getFormattedDateTime(),
+          ModifyedAt: getFormattedDateTime(),
+          updatedBy: userName,
+          updatedById: userId,
+        };
 
-      if (!updatedDoc) {
-        throw new Error(`Case ${caseId} not found`);
-      }
+        // Special field handling
+        if (changedField === "status" && newValue === "Closed") {
+          updatePayload.dateOut = getFormattedDateTime();
+          updatePayload.caseDoneBy = userName;
 
-      return updatedDoc;
-    }));
+          const doc = await KYC.findOne({ caseId });
+          if (doc?.dateIn) {
+            updatePayload.clientTAT = calculateTAT(
+              parseCustomDateTime(doc.dateIn),
+              updatePayload.dateOut
+            );
+          }
+        }
+
+        if (changedField === "caseStatus" && newValue === "Sent") {
+          updatePayload.sentDate = getFormattedDateTime();
+          updatePayload.sentBy = userName;
+        }
+
+        // Apply update
+        const updatedDoc = await KYC.findOneAndUpdate(
+          { caseId },
+          { $set: updatePayload },
+          { new: true, runValidators: true }
+        );
+
+        if (!updatedDoc) {
+          throw new Error(`Case ${caseId} not found`);
+        }
+
+        return updatedDoc;
+      })
+    );
 
     res.json({
       success: true,
-      updatedDocuments: results
+      updatedDocuments: results,
     });
-
   } catch (error) {
     console.error("Update Error:", error);
-    res.status(400).json({ // Changed to 400 for client errors
+    res.status(400).json({
+      // Changed to 400 for client errors
       success: false,
       message: error.message,
-      field: error.message.includes('Vendor') ? 'vendorName' : 
-             error.message.includes('Employee') ? 'listByEmployee' : undefined
+      field: error.message.includes("Vendor")
+        ? "vendorName"
+        : error.message.includes("Employee")
+          ? "listByEmployee"
+          : undefined,
     });
   }
 };
@@ -2472,7 +2538,7 @@ exports.updateTrackerData = async (req, res) => {
 //       // Validate required fields
 //       const { caseId, changedField, userId, userName } = update;
 //       const newValue = update[changedField];
-      
+
 //       if (!caseId || !changedField || newValue === undefined) {
 //         throw new Error(`Invalid update format: ${JSON.stringify(update)}`);
 //       }
@@ -2493,7 +2559,7 @@ exports.updateTrackerData = async (req, res) => {
 //       if (changedField === 'status' && newValue === "Closed") {
 //         updatePayload.dateOut = getFormattedDateTime();
 //         updatePayload.caseDoneBy = userName;
-        
+
 //         const doc = await KYC.findOne({ caseId });
 //         if (doc?.dateIn) {
 //           updatePayload.clientTAT = calculateTAT(
@@ -2558,14 +2624,16 @@ async function handleCaseStatusSent(caseId, updatePayload, user) {
 
 function formatDocumentForFrontend(doc) {
   const formatted = doc.toObject();
-  
+
   // Convert all dates to frontend format
-  ['dateIn', 'dateOut', 'sentDate', 'createdAt', 'updatedAt'].forEach(field => {
-    if (formatted[field]) {
-      formatted[field] = formatForFrontend(formatted[field]);
+  ["dateIn", "dateOut", "sentDate", "createdAt", "updatedAt"].forEach(
+    (field) => {
+      if (formatted[field]) {
+        formatted[field] = formatForFrontend(formatted[field]);
+      }
     }
-  });
-  
+  );
+
   return formatted;
 }
 exports.getTemplate = async (req, res) => {
@@ -3330,7 +3398,7 @@ exports.getTemplate = async (req, res) => {
 //       res.status(400).json({ message: "Record not found!" });
 //     }
 //     // Save the recheck data to the database
-   
+
 //     record.caseId = generateCaseId(),
 //     record.requirement = requirement;
 //     record.dateIn = getFormattedDateTime(),
@@ -3351,40 +3419,46 @@ exports.updaterequirement = async (req, res) => {
       return res.status(404).json({ message: "Record not found!" });
     }
 
+    const currentDate = moment().tz("Asia/Kolkata");
+    const year = currentDate.year().toString();
+    const month = (currentDate.month() + 1).toString().padStart(2, "0");
+
     // Create a new rechecked record (don't modify the original)
     const recheckedRecord = new KYC({
       ...record.toObject(),
       _id: undefined, // Let MongoDB create a new ID
       caseId: generateCaseId(),
-      details: '',
-      details1: '',
-      priority: '',
+      details: "",
+      details1: "",
+      priority: "",
       requirement: req.body.requirement,
       dateIn: getFormattedDateTime(),
       dateInDate: getFormattedDateDay(),
       status: "Pending",
       caseStatus: "New Pending",
-      dateOut:"",
-      dateOutInDay:"",
-      sentBy:"",
-      clientTAT:"",
-      caseDoneBy:"",
-      sentDate:"",
-      sentDateInDay:"",
-      vendorStatus:"",
-      remarks:"",
-      attachments:[],
+      dateOut: "",
+      dateOutInDay: "",
+      sentBy: "",
+      clientTAT: "",
+      caseDoneBy: "",
+      sentDate: "",
+      sentDateInDay: "",
+      vendorStatus: "",
+      remarks: "",
+      attachments: [],
       isRechecked: true,
-      recheckedAt: new Date(),
-      originalCaseId: record.caseId 
+      recheckedAt: getFormattedDateTime(),
+      originalCaseId: record.caseId,
+      month: month,
+      year: year,
     });
 
     await recheckedRecord.save();
     // console.log("Rechecked record from backend:", recheckedRecord);
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
       message: "Record rechecked successfully!",
-      recheckedRecord 
+      recheckedRecord,
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to recheck data." });
@@ -3400,7 +3474,7 @@ exports.updaterequirement = async (req, res) => {
 //     if (!record) {
 //       res.status(400).json({ message: "Record not found!" });
 //     }
-    
+
 //     // Save the recheck data to the database
 //     record.caseId = generateCaseId();
 //     record.requirement = requirement;
@@ -3410,12 +3484,12 @@ exports.updaterequirement = async (req, res) => {
 //     record.caseStatus = "New Pending";
 //     record.isRechecked = true;  // Add recheck flag
 //     record.recheckedAt = new Date();  // Add timestamp for sorting
-    
+
 //     await record.save();
 
-//     res.status(200).json({ 
+//     res.status(200).json({
 //       message: "Record rechecked successfully!",
-//       recheckedRecord: record 
+//       recheckedRecord: record
 //     });
 //   } catch (error) {
 //     res.status(500).json({ message: "Failed to recheck data." });
@@ -3468,9 +3542,9 @@ exports.deleteRow = async (req, res) => {
 };
 exports.deletedItems = async (req, res) => {
   try {
-    const { 
-      role, 
-      userId, 
+    const {
+      role,
+      userId,
       name,
       page = 1,
       pageSize = 50,
@@ -3478,7 +3552,7 @@ exports.deletedItems = async (req, res) => {
       product,
       productType,
       status,
-      caseStatus
+      caseStatus,
     } = req.query;
 
     const skip = (page - 1) * pageSize;
@@ -3489,18 +3563,15 @@ exports.deletedItems = async (req, res) => {
       query.userId = userId;
     } else if (role === "client") {
       const user = await User.findOne({ userId });
-      query.$or = [
-        { userId: user.userId },
-        { clientCode: user.clientCode }
-      ];
+      query.$or = [{ userId: user.userId }, { clientCode: user.clientCode }];
     }
 
     // Search and other filters
     if (searchQuery) {
       query.$or = [
-        { caseId: { $regex: searchQuery, $options: 'i' } },
-        { accountNumber: { $regex: searchQuery, $options: 'i' } },
-        { name: { $regex: searchQuery, $options: 'i' } }
+        { caseId: { $regex: searchQuery, $options: "i" } },
+        { accountNumber: { $regex: searchQuery, $options: "i" } },
+        { name: { $regex: searchQuery, $options: "i" } },
       ];
     }
 
@@ -3521,24 +3592,24 @@ exports.deletedItems = async (req, res) => {
         total: totalCount,
         page: parseInt(page),
         pageSize: parseInt(pageSize),
-        totalPages: Math.ceil(totalCount / pageSize)
-      }
+        totalPages: Math.ceil(totalCount / pageSize),
+      },
     });
   } catch (error) {
     console.error("Error fetching deleted items:", error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: "Failed to fetch deleted items.",
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 // exports.deletedItems = async (req, res) => {
 //   try {
-//     const { 
-//       role, 
-//       userId, 
+//     const {
+//       role,
+//       userId,
 //       name,
 //       page = 1,
 //       pageSize = 50,
@@ -3551,10 +3622,10 @@ exports.deletedItems = async (req, res) => {
 //     } = req.query;
 
 //     const skip = (page - 1) * pageSize;
-    
+
 //     // Build the base query
 //     let query = { isDeleted: true }; // Ensure only deleted items
-    
+
 //     // Role-based filtering
 //     if (role === "employee") {
 //       query.userId = userId;
@@ -3608,9 +3679,9 @@ exports.deletedItems = async (req, res) => {
 //     });
 //   } catch (error) {
 //     console.error("Error fetching deleted items:", error);
-//     res.status(500).json({ 
-//       success: false, 
-//       message: "Failed to fetch deleted items." 
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to fetch deleted items."
 //     });
 //   }
 // };
@@ -3706,7 +3777,6 @@ exports.restoreRecords = async (req, res) => {
   }
 };
 
-
 ////////////////---Real Time Updates----//////////////////
 
 // Add these exports to your kycController.js
@@ -3728,7 +3798,9 @@ exports.getCaseStatusDistribution = async (req, res) => {
     res.json({ success: true, distribution });
   } catch (error) {
     console.error("Distribution error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch distribution" });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch distribution" });
   }
 };
 
@@ -3739,18 +3811,22 @@ exports.getRecentActivity = async (req, res) => {
     res.json({ success: true, activity });
   } catch (error) {
     console.error("Activity error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch activity" });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch activity" });
   }
 };
-exports.getVerificationTrendsData = async (req,res) =>{
+exports.getVerificationTrendsData = async (req, res) => {
   try {
     const trends = await getVerificationTrendsData();
     res.json({ success: true, trends });
   } catch (error) {
     console.error("Activity error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch activity" });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch activity" });
   }
-}
+};
 
 // Manual update trigger
 exports.sendManualUpdate = async (req, res) => {
@@ -3763,68 +3839,74 @@ exports.sendManualUpdate = async (req, res) => {
   }
 };
 
-
 exports.getCaseDetails = async (req, res) => {
   try {
-    const { type, clientType, clientCode, product, download,search } = req.query;
-    
+    const { type, clientType, clientCode, product, download, search } =
+      req.query;
+
     let query = {};
-    
+
     // Apply filters based on the hierarchy level
-    if (type === 'today') {
+    if (type === "today") {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       query.createdAt = { $gte: today };
-    } 
-    if (type === 'New Pending') {
-      query.caseStatus = 'New Pending';
     }
-    if (type === 'closed') {
-      query.status = 'Closed';
+    if (type === "New Pending") {
+      query.caseStatus = "New Pending";
     }
-    if (type === 'highPriority') {
-      query.priority = 'High';
+    if (type === "closed") {
+      query.status = "Closed";
     }
-    
+    if (type === "highPriority") {
+      query.priority = "High";
+    }
+
     if (clientType) {
       query.clientType = clientType;
     }
-    
+
     if (clientCode) {
       query.clientCode = clientCode;
     }
-    
+
     if (product) {
       query.product = product;
     }
-    
+
     if (search) {
       query.$or = [
-        { caseId: { $regex: search, $options: 'i' } },
-        { name: { $regex: search, $options: 'i' } },
-        { clientType: { $regex: search, $options: 'i' } },
-        { clientCode: { $regex: search, $options: 'i' } },
-        { product: { $regex: search, $options: 'i' } },
-        { caseStatus: { $regex: search, $options: 'i' } },
-        { priority: { $regex: search, $options: 'i' } }
+        { caseId: { $regex: search, $options: "i" } },
+        { name: { $regex: search, $options: "i" } },
+        { clientType: { $regex: search, $options: "i" } },
+        { clientCode: { $regex: search, $options: "i" } },
+        { product: { $regex: search, $options: "i" } },
+        { caseStatus: { $regex: search, $options: "i" } },
+        { priority: { $regex: search, $options: "i" } },
       ];
     }
 
     // For download requests, return the raw data in Excel format
     if (download) {
       const cases = await KYC.find(query).lean();
-      
+
       // Create worksheet
       const worksheet = XLSX.utils.json_to_sheet(cases);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "CaseDetails");
-      
+
       // Generate buffer
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      
+      const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
       // Set headers for download
-      res.setHeader('Content-Disposition', 'attachment; filename="CaseDetails.xlsx"');
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="CaseDetails.xlsx"'
+      );
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
       return res.send(buffer);
     }
 
@@ -3837,24 +3919,24 @@ exports.getCaseDetails = async (req, res) => {
       // Product level - group by product
       const products = await KYC.aggregate([
         { $match: query },
-        { 
-          $group: { 
-            _id: '$product',
+        {
+          $group: {
+            _id: "$product",
             count: { $sum: 1 },
             // Include sample document for additional fields if needed
-            sampleDoc: { $first: '$$ROOT' } 
-          } 
+            sampleDoc: { $first: "$$ROOT" },
+          },
         },
-        { 
-          $project: { 
-            name: '$_id', 
+        {
+          $project: {
+            name: "$_id",
             count: 1,
             // Include other fields you want to search by
-            clientType: '$sampleDoc.clientType',
-            clientCode: '$sampleDoc.clientCode',
-            _id: 0 
-          } 
-        }
+            clientType: "$sampleDoc.clientType",
+            clientCode: "$sampleDoc.clientCode",
+            _id: 0,
+          },
+        },
       ]);
       // const products = await KYC.aggregate([
       //   { $match: query },
@@ -3867,8 +3949,8 @@ exports.getCaseDetails = async (req, res) => {
       // Client code level - group by client code
       const clientCodes = await KYC.aggregate([
         { $match: query },
-        { $group: { _id: '$clientCode', count: { $sum: 1 } } },
-        { $project: { name: '$_id', count: 1, _id: 0 } }
+        { $group: { _id: "$clientCode", count: { $sum: 1 } } },
+        { $project: { name: "$_id", count: 1, _id: 0 } },
       ]);
       const records = await KYC.find(query);
       return res.json({ success: true, data: clientCodes, records });
@@ -3876,15 +3958,15 @@ exports.getCaseDetails = async (req, res) => {
       // Client type level - group by client type
       const clientTypes = await KYC.aggregate([
         { $match: query },
-        { $group: { _id: '$clientType', count: { $sum: 1 } } },
-        { $project: { name: '$_id', count: 1, _id: 0 } }
+        { $group: { _id: "$clientType", count: { $sum: 1 } } },
+        { $project: { name: "$_id", count: 1, _id: 0 } },
       ]);
       const records = await KYC.find(query);
       return res.json({ success: true, data: clientTypes, records });
     }
   } catch (error) {
-    console.error('Error fetching case details:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error("Error fetching case details:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -3894,18 +3976,24 @@ function exportToExcel(res, data, filters) {
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Cases");
-    
-    const filename = [
-      filters.type,
-      filters.clientType || '',
-      filters.clientCode || '',
-      filters.product || ''
-    ].filter(Boolean).join('_') + '.xlsx';
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    const filename =
+      [
+        filters.type,
+        filters.clientType || "",
+        filters.clientCode || "",
+        filters.product || "",
+      ]
+        .filter(Boolean)
+        .join("_") + ".xlsx";
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
     return res.send(buffer);
   } catch (error) {
     console.error("Export error:", error);
@@ -3913,10 +4001,7 @@ function exportToExcel(res, data, filters) {
   }
 }
 
-
 /////////////////Attachment//////////////////////////
-
-
 
 exports.uploadSingleAttachment = async (req, res) => {
   try {
@@ -3925,13 +4010,15 @@ exports.uploadSingleAttachment = async (req, res) => {
     console.log("Initial file info:", file);
 
     if (!file) {
-      return res.status(400).json({ success: false, message: "No file uploaded" });
+      return res
+        .status(400)
+        .json({ success: false, message: "No file uploaded" });
     }
 
     if (!caseId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Case ID is required"
+      return res.status(400).json({
+        success: false,
+        message: "Case ID is required",
       });
     }
 
@@ -3940,9 +4027,11 @@ exports.uploadSingleAttachment = async (req, res) => {
     if (file.size === 0) {
       actualSize = await verifyS3UploadSize(file.key);
       console.log("Verified actual size:", actualSize);
-      
+
       if (actualSize === null) {
-        console.warn("Could not verify file size in S3, using reported size (0)");
+        console.warn(
+          "Could not verify file size in S3, using reported size (0)"
+        );
         actualSize = 0;
       }
     }
@@ -3956,7 +4045,7 @@ exports.uploadSingleAttachment = async (req, res) => {
       location: file.location,
       key: file.key,
       uploadedAt: getFormattedDateTime(),
-      etag: file.etag
+      etag: file.etag,
     };
 
     const result = await KYC.updateOne(
@@ -3964,21 +4053,21 @@ exports.uploadSingleAttachment = async (req, res) => {
       { $push: { attachments: attachment } }
     );
 
-    res.status(201).json({ 
-      success: true, 
+    res.status(201).json({
+      success: true,
       message: "File uploaded successfully",
       attachment: {
         ...attachment,
-        size: actualSize // Ensure the response shows correct size
-      }
+        size: actualSize, // Ensure the response shows correct size
+      },
     });
   } catch (error) {
     console.error("Upload error:", error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: "File upload failed",
       error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 };
@@ -3986,21 +4075,25 @@ exports.uploadSingleAttachment = async (req, res) => {
 // Function to verify object exists in S3
 
 // Helper: Delay function
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Helper: Verify S3 key exists + get size, with retries
 async function verifyS3KeyExistsWithRetry(key, retries = 3, delayMs = 500) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const head = await s3.send(new HeadObjectCommand({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: key,
-      }));
+      const head = await s3.send(
+        new HeadObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: key,
+        })
+      );
       return head.ContentLength || 0; // ✅ Return size in bytes
     } catch (error) {
-      if (error.name === 'NotFound' || error.name === 'NoSuchKey') {
+      if (error.name === "NotFound" || error.name === "NoSuchKey") {
         if (attempt < retries) {
-          console.warn(`S3 key not found (attempt ${attempt}/${retries}) — retrying in ${delayMs}ms`);
+          console.warn(
+            `S3 key not found (attempt ${attempt}/${retries}) — retrying in ${delayMs}ms`
+          );
           await delay(delayMs);
         } else {
           return null; // After retries, still not found
@@ -4020,20 +4113,24 @@ exports.uploadAttachment = async (req, res) => {
       ? req.body.caseIds
       : [req.body.caseIds].filter(Boolean);
 
-    if (caseIds.length === 0 && typeof req.body.caseIds === 'string') {
+    if (caseIds.length === 0 && typeof req.body.caseIds === "string") {
       try {
         caseIds = JSON.parse(req.body.caseIds);
       } catch {
-        caseIds = req.body.caseIds.split(',').map(id => id.trim());
+        caseIds = req.body.caseIds.split(",").map((id) => id.trim());
       }
     }
 
     const files = req.files;
     if (!files || files.length === 0) {
-      return res.status(400).json({ success: false, message: "No files uploaded" });
+      return res
+        .status(400)
+        .json({ success: false, message: "No files uploaded" });
     }
     if (!caseIds.length) {
-      return res.status(400).json({ success: false, message: "Invalid case IDs" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid case IDs" });
     }
 
     const uploadedAttachments = [];
@@ -4046,7 +4143,10 @@ exports.uploadAttachment = async (req, res) => {
         const s3Size = await verifyS3KeyExistsWithRetry(file.key, 3, 500);
 
         if (!s3Size) {
-          errors.push({ filename: file.originalname, error: "File not found in S3 after upload" });
+          errors.push({
+            filename: file.originalname,
+            error: "File not found in S3 after upload",
+          });
           continue;
         }
         if (file.size === 0) {
@@ -4062,7 +4162,7 @@ exports.uploadAttachment = async (req, res) => {
           location: file.location,
           key: file.key,
           uploadedAt: getFormattedDateTime(),
-          etag: file.etag
+          etag: file.etag,
         };
 
         // Save to DB
@@ -4076,7 +4176,7 @@ exports.uploadAttachment = async (req, res) => {
           Bucket: process.env.AWS_BUCKET_NAME,
           Key: file.key,
         });
-        
+
         // const downloadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour expiration
 
         uploadedAttachments.push({
@@ -4084,9 +4184,8 @@ exports.uploadAttachment = async (req, res) => {
           key: file.key,
           size: actualSize,
           // downloadUrl: downloadUrl,
-          location: file.location
+          location: file.location,
         });
-
       } catch (err) {
         errors.push({ filename: file.originalname, error: err.message });
       }
@@ -4096,7 +4195,7 @@ exports.uploadAttachment = async (req, res) => {
       success: errors.length === 0,
       message: `Processed ${uploadedAttachments.length} file(s) successfully`,
       uploadedFiles: uploadedAttachments,
-      caseIds: caseIds
+      caseIds: caseIds,
     };
 
     if (errors.length) {
@@ -4105,13 +4204,12 @@ exports.uploadAttachment = async (req, res) => {
     }
 
     res.status(errors.length ? 207 : 201).json(response);
-
   } catch (error) {
     console.error("Upload error:", error);
     res.status(500).json({
       success: false,
       message: "File upload failed",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -4210,11 +4308,10 @@ exports.uploadAttachment = async (req, res) => {
 //   }
 // };
 
-
 exports.downloadAttachment = async (req, res) => {
   try {
     const { caseId, filename } = req.params;
-    
+
     // Find the document with matching caseId and filename
     const kycDoc = await KYC.findOne(
       { caseId, "attachments.originalname": filename },
@@ -4222,7 +4319,9 @@ exports.downloadAttachment = async (req, res) => {
     );
 
     if (!kycDoc || !kycDoc.attachments || kycDoc.attachments.length === 0) {
-      return res.status(404).json({ success: false, message: 'Attachment not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: "Attachment not found" });
     }
 
     const attachment = kycDoc.attachments[0];
@@ -4231,78 +4330,80 @@ exports.downloadAttachment = async (req, res) => {
     if (attachment.key) {
       try {
         const command = new GetObjectCommand({
-          Bucket: process.env.AWS_BUCKET_NAME || 'rvsdoc',
-          Key: attachment.key
+          Bucket: process.env.AWS_BUCKET_NAME || "rvsdoc",
+          Key: attachment.key,
         });
 
         // Get the object from S3
         const response = await s3.send(command);
 
         // Set proper headers
-        res.setHeader('Content-Disposition', `attachment; filename=${encodeURIComponent(attachment.originalname)}`);
-        res.setHeader('Content-Type', attachment.mimetype);
-        res.setHeader('Content-Length', attachment.size);
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename=${encodeURIComponent(attachment.originalname)}`
+        );
+        res.setHeader("Content-Type", attachment.mimetype);
+        res.setHeader("Content-Length", attachment.size);
 
         // Stream the file directly from S3 to the client
         response.Body.pipe(res);
         return;
       } catch (s3Error) {
-        console.error('S3 Download Error:', s3Error);
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Failed to download from S3',
-          error: s3Error.message 
+        console.error("S3 Download Error:", s3Error);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to download from S3",
+          error: s3Error.message,
         });
       }
     }
 
     // Fallback to local file system (only if not using S3)
     if (attachment.path) {
-      const filePath = path.join(__dirname, '..', attachment.path);
+      const filePath = path.join(__dirname, "..", attachment.path);
       if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ 
-          success: false, 
-          message: 'File not found on server' 
+        return res.status(404).json({
+          success: false,
+          message: "File not found on server",
         });
       }
 
-      res.setHeader('Content-Disposition', `attachment; filename=${encodeURIComponent(attachment.originalname)}`);
-      res.setHeader('Content-Type', attachment.mimetype);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${encodeURIComponent(attachment.originalname)}`
+      );
+      res.setHeader("Content-Type", attachment.mimetype);
       fs.createReadStream(filePath).pipe(res);
       return;
     }
 
-    return res.status(404).json({ 
-      success: false, 
-      message: 'Attachment location not specified' 
+    return res.status(404).json({
+      success: false,
+      message: "Attachment location not specified",
     });
   } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Download failed',
-      error: error.message 
+    console.error("Download error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Download failed",
+      error: error.message,
     });
   }
 };
-
 
 // // Get Attachments (Simplified)
 exports.getAttachments = async (req, res) => {
   try {
     const { caseId } = req.query;
-    
-    if (!caseId) return res.status(400).send('caseId required');
 
-    const kycDoc = await KYC.findOne(
-      { caseId },
-      { attachments: 1 }
-    );
+    if (!caseId) return res.status(400).send("caseId required");
+
+    const kycDoc = await KYC.findOne({ caseId }, { attachments: 1 });
 
     res.json(kycDoc?.attachments || []);
   } catch (error) {
-    console.error('Fetch error:', error);
-    res.status(500).send('Failed to get attachments');
+    console.error("Fetch error:", error);
+    res.status(500).send("Failed to get attachments");
   }
 };
 
@@ -4321,9 +4422,9 @@ exports.deleteAttachment = async (req, res) => {
 
     if (!kycDoc?.attachments?.length) {
       // console.log('Attachment not found in database');
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Attachment not found in database' 
+      return res.status(404).json({
+        success: false,
+        message: "Attachment not found in database",
       });
     }
 
@@ -4344,9 +4445,9 @@ exports.deleteAttachment = async (req, res) => {
     //     console.error('S3 Delete Error:', s3Error);
     //     // Continue with DB deletion even if S3 deletion fails
     //   }
-    // } 
+    // }
     // 3. Fallback to local file deletion if path exists
-     if (attachment.path) {
+    if (attachment.path) {
       try {
         const filePath = path.resolve(attachment.path);
         if (fs.existsSync(filePath)) {
@@ -4355,7 +4456,7 @@ exports.deleteAttachment = async (req, res) => {
           // console.log('Successfully deleted local file');
         }
       } catch (fsError) {
-        console.error('File System Delete Error:', fsError);
+        console.error("File System Delete Error:", fsError);
         // Continue with DB deletion even if file deletion fails
       }
     }
@@ -4368,23 +4469,23 @@ exports.deleteAttachment = async (req, res) => {
 
     if (updateResult.modifiedCount === 0) {
       // console.log('No document was modified - attachment may not exist');
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Attachment not found in database' 
+      return res.status(404).json({
+        success: false,
+        message: "Attachment not found in database",
       });
     }
 
     // console.log('Successfully deleted attachment from database');
-    res.json({ 
-      success: true, 
-      message: 'Attachment deleted successfully' 
+    res.json({
+      success: true,
+      message: "Attachment deleted successfully",
     });
   } catch (error) {
-    console.error('Delete error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Delete failed',
-      error: error.message 
+    console.error("Delete error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Delete failed",
+      error: error.message,
     });
   }
 };
@@ -4394,64 +4495,64 @@ exports.deleteAttachment = async (req, res) => {
 exports.verifyFile = async (req, res) => {
   try {
     const { key, caseIds } = req.body;
-    
+
     if (!key) {
       return res.status(400).json({ error: "File key is required" });
     }
-    
+
     // Verify the file exists in S3
     try {
       const headCommand = new HeadObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
         Key: key,
       });
-      
+
       const headResult = await s3.send(headCommand);
-      
+
       // Verify the file is associated with the case IDs
       if (caseIds && caseIds.length > 0) {
         const casesWithFile = await KYC.countDocuments({
           caseId: { $in: caseIds },
-          'attachments.key': key
+          "attachments.key": key,
         });
-        
+
         if (casesWithFile === 0) {
           return res.status(404).json({
             error: "File uploaded but not associated with cases",
             existsInS3: true,
-            associatedWithCases: false
+            associatedWithCases: false,
           });
         }
       }
-      
+
       // Generate a pre-signed URL for download
       const command = new GetObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
         Key: key,
       });
-      
+
       const url = await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour expiration
-      
+
       res.json({
         exists: true,
         key: key,
         size: headResult.ContentLength,
         lastModified: headResult.LastModified,
         url: url,
-        associatedWithCases: caseIds ? true : undefined
+        associatedWithCases: caseIds ? true : undefined,
       });
     } catch (error) {
-      if (error.name === 'NotFound' || error.name === 'NoSuchKey') {
+      if (error.name === "NotFound" || error.name === "NoSuchKey") {
         res.status(404).json({
           exists: false,
           key: key,
-          error: "File not found in S3"
+          error: "File not found in S3",
         });
-      } else if (error.name === 'AccessDenied') {
+      } else if (error.name === "AccessDenied") {
         res.status(403).json({
           exists: false,
           key: key,
-          error: "Access denied to file"
+          error: "Access denied to file",
         });
       } else {
         throw error;
@@ -4461,7 +4562,7 @@ exports.verifyFile = async (req, res) => {
     console.error("File verification error:", error);
     res.status(500).json({
       error: "Failed to verify file",
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -4470,34 +4571,37 @@ exports.verifyFile = async (req, res) => {
 exports.downloadFile = async (req, res) => {
   try {
     const { key } = req.query;
-    
+
     if (!key) {
       return res.status(400).json({ error: "File key is required" });
     }
-    
+
     // Verify the user has access to this file
     // You might want to add additional authorization checks here
-    
+
     const command = new GetObjectCommand({
       Bucket: process.env.AWS_BUCKET_NAME,
       Key: key,
     });
-    
+
     const { Body, ContentType } = await s3.send(command);
-    
+
     // Set appropriate headers
-    res.setHeader('Content-Type', ContentType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${key.split('/').pop()}"`);
-    
+    res.setHeader("Content-Type", ContentType || "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${key.split("/").pop()}"`
+    );
+
     // Stream the file
     Body.pipe(res);
   } catch (error) {
     console.error("File download error:", error);
-    
-    if (error.name === 'NoSuchKey') {
+
+    if (error.name === "NoSuchKey") {
       return res.status(404).json({ error: "File not found" });
     }
-    
+
     res.status(500).json({ error: "Download failed", message: error.message });
   }
 };
@@ -4511,7 +4615,7 @@ exports.downloadFile = async (req, res) => {
 //     const { product, accountNumber, requirement, caseId } = req.body;
 
 //     console.log(`product${product}`,`accountNumber${accountNumber}`,`requirement${requirement}`,`caseId${caseId}`)
-    
+
 //     // Find records with same product and account number, excluding current record
 //     const similarRecords = await KYC.find({
 //       product,
@@ -4521,7 +4625,6 @@ exports.downloadFile = async (req, res) => {
 //     })
 //     .sort({ createdAt: -1 })
 //     .limit(10);
-    
 
 //     res.json({ success: true, records: similarRecords });
 //   } catch (error) {
@@ -4529,17 +4632,16 @@ exports.downloadFile = async (req, res) => {
 //   }
 // }
 
-
 // exports.updateSimilarRecord = async (req,res) => {
 //   console.log("hello")
 //   try {
 //     const { caseId, updates } = req.body;
 //     console.log("updates:",updates)
-    
+
 //     // Preserve certain fields while allowing others to be updated
 //     const record = await KYC.findOneAndUpdate(
 //       { caseId },
-//       { 
+//       {
 //         $set: updates,
 //         $currentDate: { updatedAt: true }
 //       },
@@ -4552,14 +4654,13 @@ exports.downloadFile = async (req, res) => {
 //   }
 // }
 
-
 // New endpoint for batch deduce
 
 exports.similarRecords = async (req, res) => {
   try {
-    const { 
+    const {
       userId,
-      page = 1, 
+      page = 1,
       pageSize = 50,
       searchQuery = "",
       // Filter parameters
@@ -4585,13 +4686,13 @@ exports.similarRecords = async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: "User not found"
+        message: "User not found",
       });
     }
 
     // Base query for duplicates
     let query = { isDedup: true };
-    
+
     // Role-specific filtering
     if (user.role === "employee") {
       query.listByEmployee = user.name;
@@ -4599,57 +4700,57 @@ exports.similarRecords = async (req, res) => {
 
     // Search functionality
     if (searchQuery) {
-  const regex = { $regex: searchQuery, $options: "i" };
+      const regex = { $regex: searchQuery, $options: "i" };
 
-  query.$or = [
-    { caseId: regex },
-    { userId: regex },
-    { remarks: regex },
-    { name: regex },
-    { details: regex },
-    { details1: regex },
-    { priority: regex },
-    { correctUPN: regex },
-    { product: regex },
-    { updatedProductName: regex },
-    { accountNumber: regex },
-    { requirement: regex },
-    { updatedRequirement: regex },
-    { accountNumberDigit: regex },
-    { bankCode: regex },
-    { clientCode: regex },
-    { vendorName: regex },
-    { dateIn: regex },
-    { dateInDate: regex },
-    { status: regex },
-    { caseStatus: regex },
-    { productType: regex },
-    { listByEmployee: regex },
-    { dateOut: regex },
-    { dateOutInDay: regex },
-    { sentBy: regex },
-    { autoOrManual: regex },
-    { caseDoneBy: regex },
-    { clientTAT: regex },
-    { customerCare: regex },
-    { sentDate: regex },
-    { sentDateInDay: regex },
-    { clientType: regex },
-    { dedupBy: regex },
-    { vendorRate: regex },
-    { clientRate: regex },
-    { NameUploadBy: regex },
-    { ReferBy: regex },
-    { ipAddress: regex },
-    { vendorStatus: regex },
-    { year: regex },
-    { month: regex },
-    { role: regex },
-    { "attachments.filename": regex },
-    { "attachments.originalname": regex },
-    { "attachments.key": regex }
-  ];
-}
+      query.$or = [
+        { caseId: regex },
+        { userId: regex },
+        { remarks: regex },
+        { name: regex },
+        { details: regex },
+        { details1: regex },
+        { priority: regex },
+        { correctUPN: regex },
+        { product: regex },
+        { updatedProductName: regex },
+        { accountNumber: regex },
+        { requirement: regex },
+        { updatedRequirement: regex },
+        { accountNumberDigit: regex },
+        { bankCode: regex },
+        { clientCode: regex },
+        { vendorName: regex },
+        { dateIn: regex },
+        { dateInDate: regex },
+        { status: regex },
+        { caseStatus: regex },
+        { productType: regex },
+        { listByEmployee: regex },
+        { dateOut: regex },
+        { dateOutInDay: regex },
+        { sentBy: regex },
+        { autoOrManual: regex },
+        { caseDoneBy: regex },
+        { clientTAT: regex },
+        { customerCare: regex },
+        { sentDate: regex },
+        { sentDateInDay: regex },
+        { clientType: regex },
+        { dedupBy: regex },
+        { vendorRate: regex },
+        { clientRate: regex },
+        { NameUploadBy: regex },
+        { ReferBy: regex },
+        { ipAddress: regex },
+        { vendorStatus: regex },
+        { year: regex },
+        { month: regex },
+        { role: regex },
+        { "attachments.filename": regex },
+        { "attachments.originalname": regex },
+        { "attachments.key": regex },
+      ];
+    }
 
     // Apply filters
     if (product) query.product = product;
@@ -4663,19 +4764,21 @@ exports.similarRecords = async (req, res) => {
     // Date range filters
     if (dateInStart || dateInEnd) {
       if (dateInStart && dateInEnd) {
-        const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+        const startDate = moment(dateInStart, "DD-MM-YYYY").format(
+          "DD-MM-YYYY"
+        );
         const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
-        
+
         if (startDate === endDate) {
           query.dateIn = { $regex: `^${startDate}` };
         } else {
           query.$and = [
-            { 
-              dateIn: { 
+            {
+              dateIn: {
                 $gte: `${startDate}, 00:00:00 AM`,
-                $lte: `${endDate}, 11:59:59 PM`
-              }
-            }
+                $lte: `${endDate}, 11:59:59 PM`,
+              },
+            },
           ];
         }
       } else if (dateInStart) {
@@ -4689,53 +4792,57 @@ exports.similarRecords = async (req, res) => {
 
     // Date Out filter (same pattern as dateIn)
     if (dateOutStart || dateOutEnd) {
-  // Initialize dateOut filter object
-  const dateOutFilter = {};
-  
-  // Format dates consistently
-  const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
-  const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+      // Initialize dateOut filter object
+      const dateOutFilter = {};
 
-  // Case 1: Both start and end dates provided
-  if (startDateStr && endDateStr) {
-    if (startDateStr === endDateStr) {
-      // Single day match - use regex for exact day
-      dateOutFilter.$regex = `^${startDateStr}`;
-    } else {
-      // Date range - use string comparison
-      dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
-      dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+      // Format dates consistently
+      const startDateStr = dateOutStart
+        ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY")
+        : null;
+      const endDateStr = dateOutEnd
+        ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY")
+        : null;
+
+      // Case 1: Both start and end dates provided
+      if (startDateStr && endDateStr) {
+        if (startDateStr === endDateStr) {
+          // Single day match - use regex for exact day
+          dateOutFilter.$regex = `^${startDateStr}`;
+        } else {
+          // Date range - use string comparison
+          dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
+          dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+        }
+      }
+      // Case 2: Only start date provided
+      else if (startDateStr) {
+        dateOutFilter.$regex = `^${startDateStr}`;
+      }
+      // Case 3: Only end date provided
+      else if (endDateStr) {
+        dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+      }
+
+      // Only apply the filter if we have valid conditions
+      if (Object.keys(dateOutFilter).length > 0) {
+        // Exclude empty dateOut values and apply the filter
+        query.dateOut = {
+          ...dateOutFilter,
+          $ne: "", // Exclude empty values
+          $exists: true, // Ensure field exists
+        };
+
+        // For range queries, we need to ensure we don't match invalid date strings
+        if (dateOutFilter.$gte || dateOutFilter.$lte) {
+          query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
+        }
+      }
     }
-  }
-  // Case 2: Only start date provided
-  else if (startDateStr) {
-    dateOutFilter.$regex = `^${startDateStr}`;
-  }
-  // Case 3: Only end date provided
-  else if (endDateStr) {
-    dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
-  }
-
-  // Only apply the filter if we have valid conditions
-  if (Object.keys(dateOutFilter).length > 0) {
-    // Exclude empty dateOut values and apply the filter
-    query.dateOut = {
-      ...dateOutFilter,
-      $ne: "", // Exclude empty values
-      $exists: true // Ensure field exists
-    };
-
-    // For range queries, we need to ensure we don't match invalid date strings
-    if (dateOutFilter.$gte || dateOutFilter.$lte) {
-      query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
-    }
-  }
-}
 
     if (sentDate) {
       query.sentDate = {
         $regex: `^${sentDate}`,
-        $options: 'i'
+        $options: "i",
       };
     }
 
@@ -4748,12 +4855,16 @@ exports.similarRecords = async (req, res) => {
 
     // Get column order for this role
     const config = await ColumnConfig.findOne({ role: user.role });
-    let columnOrder = config?.columnOrder || Object.keys(KYC.schema.paths)
-      .filter(field => !['_id', '__v', 'createdAt', 'userId', 'updatedAt'].includes(field));
+    let columnOrder =
+      config?.columnOrder ||
+      Object.keys(KYC.schema.paths).filter(
+        (field) =>
+          !["_id", "__v", "createdAt", "userId", "updatedAt"].includes(field)
+      );
 
     // Build projection
     const projection = {};
-    columnOrder.forEach(field => {
+    columnOrder.forEach((field) => {
       projection[field] = 1;
     });
     projection._id = 0;
@@ -4769,7 +4880,7 @@ exports.similarRecords = async (req, res) => {
 
     // Group by product and accountNumber to identify duplicates
     const grouped = {};
-    records.forEach(record => {
+    records.forEach((record) => {
       const key = `${record.updatedProductName}|${record.accountNumber}`;
       if (!grouped[key]) {
         grouped[key] = [];
@@ -4779,11 +4890,11 @@ exports.similarRecords = async (req, res) => {
 
     // Filter groups with duplicates and apply colors
     const duplicates = Object.values(grouped)
-      .filter(group => group.length > 1)
+      .filter((group) => group.length > 1)
       .map((group, groupIndex) => {
         return group.map((record, recordIndex) => ({
           ...record._doc,
-          _dedupColor: (groupIndex + recordIndex) % 2 === 0 ? 'blue' : 'green'
+          _dedupColor: (groupIndex + recordIndex) % 2 === 0 ? "blue" : "green",
         }));
       });
 
@@ -4791,34 +4902,33 @@ exports.similarRecords = async (req, res) => {
     const flatDuplicates = duplicates.flat();
 
     res.json({
-  success: true,
-  data: flatDuplicates, // Changed from 'duplicates' to 'data'
-  pagination: {
-    total: totalCount,
-    page: parseInt(page),
-    pageSize: parseInt(pageSize),
-    totalPages: Math.ceil(totalCount / pageSize),
-    totalDuplicates: flatDuplicates.length,
-    totalGroups: duplicates.length
-  }
-});
-
+      success: true,
+      data: flatDuplicates, // Changed from 'duplicates' to 'data'
+      pagination: {
+        total: totalCount,
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        totalPages: Math.ceil(totalCount / pageSize),
+        totalDuplicates: flatDuplicates.length,
+        totalGroups: duplicates.length,
+      },
+    });
   } catch (error) {
     console.error("Error finding similar records:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
 
 // exports.similarRecords = async (req, res) => {
 //   try {
-//     const { 
+//     const {
 //       userId,
 //       role,
 //       name,
-//       page = 1, 
+//       page = 1,
 //       pageSize = 50,
 //       searchQuery = "",
 //       // Filter parameters
@@ -4842,14 +4952,14 @@ exports.similarRecords = async (req, res) => {
 //     // Get column order for this role
 //     const config = await ColumnConfig.findOne({ role });
 //     let columnOrder = config?.columnOrder;
-    
+
 //     if (!columnOrder) {
 //       // Fallback to all fields if no config exists
 //       columnOrder = Object.keys(KYC.schema.paths).filter(
 //         field => !['_id', '__v', 'createdAt','userId', 'updatedAt'].includes(field)
 //       );
 //     }
-    
+
 //     // Build projection based on column order
 //     const projection = {};
 //     columnOrder.forEach(field => {
@@ -4942,15 +5052,15 @@ exports.similarRecords = async (req, res) => {
 //         // RANGE QUERY - handle as string comparison
 //         const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
 //         const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
-        
+
 //         if (startDate === endDate) {
 //           // Single day
 //           query.dateIn = { $regex: `^${startDate}` };
 //         } else {
 //           // Date range - compare as strings
 //           query.$and = [
-//             { 
-//               dateIn: { 
+//             {
+//               dateIn: {
 //                 $gte: `${startDate}, 00:00:00 AM`,
 //                 $lte: `${endDate}, 11:59:59 PM`
 //               }
@@ -4973,7 +5083,7 @@ exports.similarRecords = async (req, res) => {
 //     // Date Out range filter
 //     if (dateOutStart || dateOutEnd) {
 //       const dateOutFilter = {};
-      
+
 //       const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
 //       const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
 
@@ -5037,7 +5147,7 @@ exports.similarRecords = async (req, res) => {
 //       }
 //       grouped[key].push(record);
 //     });
-    
+
 //     // Filter groups with duplicates and apply alternating colors
 //     const duplicates = Object.values(grouped)
 //       .filter(group => group.length > 1)
@@ -5077,15 +5187,15 @@ exports.similarRecords = async (req, res) => {
 exports.copyPasteDedup = async (req, res) => {
   try {
     const { sourceRecordToCopy, targetIds, userId, userName } = req.body;
-    console.log("sourceRecordToCopy:",sourceRecordToCopy)
+    console.log("sourceRecordToCopy:", sourceRecordToCopy);
 
     const currentDate = new Date();
-    const todayString = currentDate.toISOString().split('T')[0]; // yyyy-mm-dd
+    const todayString = currentDate.toISOString().split("T")[0]; // yyyy-mm-dd
 
     const updates = {
-      attachments:sourceRecordToCopy.attachments,
-      details:sourceRecordToCopy.details,
-      details1:sourceRecordToCopy.details1,
+      attachments: sourceRecordToCopy.attachments,
+      details: sourceRecordToCopy.details,
+      details1: sourceRecordToCopy.details1,
       status: "Closed",
       caseStatus: "Sent",
       vendorName: "NAWSHAD",
@@ -5096,8 +5206,7 @@ exports.copyPasteDedup = async (req, res) => {
       caseDoneBy: userName,
       dedupBy: userName,
       vendorStatus: "Closed",
-      sentBy:userName,
-      
+      sentBy: userName,
     };
 
     const updatedRecords = [];
@@ -5118,11 +5227,10 @@ exports.copyPasteDedup = async (req, res) => {
     console.error("Copy-paste error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
-
 
 // exports.copyPasteDedup = async (req, res) => {
 //   try {
@@ -5200,18 +5308,30 @@ exports.batchUpdate = async (req, res) => {
     const { caseIds, updates } = req.body;
 
     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
-      return res.status(400).json({ success: false, message: "Invalid caseIds" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid caseIds" });
     }
 
-    if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
-      return res.status(400).json({ success: false, message: "Invalid updates" });
+    if (
+      !updates ||
+      typeof updates !== "object" ||
+      Object.keys(updates).length === 0
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid updates" });
     }
 
-    const uniqueCaseIds = [...new Set(caseIds.map(id => String(id).trim()).filter(Boolean))];
+    const uniqueCaseIds = [
+      ...new Set(caseIds.map((id) => String(id).trim()).filter(Boolean)),
+    ];
     const cases = await KYC.find({ caseId: { $in: uniqueCaseIds } });
 
     if (cases.length === 0) {
-      return res.status(404).json({ success: false, message: "No cases found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "No cases found" });
     }
 
     let updatedCount = 0;
@@ -5261,13 +5381,17 @@ exports.batchUpdate = async (req, res) => {
           { $set: updateFields }
         );
 
-        if (result.modifiedCount > 0 && !updatedCaseIds.includes(caseDoc.caseId)) {
+        if (
+          result.modifiedCount > 0 &&
+          !updatedCaseIds.includes(caseDoc.caseId)
+        ) {
           updatedCount++;
           updatedCaseIds.push(caseDoc.caseId);
         }
-
       } catch (error) {
-        errors.push(`Failed to update case ${caseDoc.caseId}: ${error.message}`);
+        errors.push(
+          `Failed to update case ${caseDoc.caseId}: ${error.message}`
+        );
       }
     }
 
@@ -5277,15 +5401,14 @@ exports.batchUpdate = async (req, res) => {
       updatedCount,
       updatedCaseIds,
       clientTATUpdates,
-      errors: errors.length > 0 ? errors : undefined
+      errors: errors.length > 0 ? errors : undefined,
     });
-
   } catch (error) {
     console.error("Batch update error:", error);
     res.status(500).json({
       success: false,
       message: "Batch update failed",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -5293,22 +5416,22 @@ exports.batchUpdate = async (req, res) => {
 // exports.batchUpdate = async (req, res) => {
 //   try {
 //     const { caseIds, updates } = req.body;
-    
+
 //     // Validate input
 //     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
 //       return res.status(400).json({ success: false, message: "Invalid caseIds" });
 //     }
-    
+
 //     if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
 //       return res.status(400).json({ success: false, message: "Invalid updates" });
 //     }
 
 //     // Normalize and deduplicate caseIds
 //     const uniqueCaseIds = [...new Set(caseIds.map(id => String(id).trim()).filter(Boolean))];
-    
+
 //     // Get all cases in a single query
 //     const cases = await KYC.find({ caseId: { $in: uniqueCaseIds } });
-    
+
 //     if (cases.length === 0) {
 //       return res.status(404).json({ success: false, message: "No cases found" });
 //     }
@@ -5324,7 +5447,7 @@ exports.batchUpdate = async (req, res) => {
 //         // Check for actual changes
 //         const updateFields = {};
 //         let hasChanges = false;
-        
+
 //         for (const [key, value] of Object.entries(updates)) {
 //           if (caseDoc[key] !== value) {
 //             hasChanges = true;
@@ -5359,7 +5482,7 @@ exports.batchUpdate = async (req, res) => {
 
 //         // Perform update
 //         const result = await KYC.updateOne(
-//           { _id: caseDoc._id }, 
+//           { _id: caseDoc._id },
 //           { $set: updateFields }
 //         );
 
@@ -5383,11 +5506,10 @@ exports.batchUpdate = async (req, res) => {
 //     });
 //   } catch (error) {
 //     console.error("Batch update error:", error);
-//     res.status(500).json({ 
-//       success: false, 
-//       message: "Batch update failed", 
-//       error: error.message 
+//     res.status(500).json({
+//       success: false,
+//       message: "Batch update failed",
+//       error: error.message
 //     });
 //   }
 // };
-
