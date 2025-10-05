@@ -2474,19 +2474,31 @@ exports.updateTrackerData = async (req, res) => {
         // Special field handling
         if (changedField === "status" && newValue === "Closed") {
           updatePayload.dateOut = getFormattedDateTime();
+          updatePayload.dateOutInDay = getFormattedDateDay();
           updatePayload.caseDoneBy = userName;
 
           const doc = await KYC.findOne({ caseId });
-          if (doc?.dateIn) {
-            updatePayload.clientTAT = calculateTAT(
-              parseCustomDateTime(doc.dateIn),
-              updatePayload.dateOut
-            );
+
+          if (doc?.sentDate) {
+            const sentDate = doc.sentDate;
+            const dateOut = getFormattedDateTime();
+
+            if (sentDate && dateOut) {
+              const tat = calculateTAT(sentDate, dateOut);
+              if (tat !== "Invalid Date Range") {
+                updatePayload.clientTAT = tat;
+              }
+            }
+            // updatePayload.clientTAT = calculateTAT(
+            //   parseCustomDateTime(doc.dateIn),
+            //   updatePayload.dateOut
+            // );
           }
         }
 
         if (changedField === "caseStatus" && newValue === "Sent") {
           updatePayload.sentDate = getFormattedDateTime();
+          updatePayload.sentDateInDay = getFormattedDateDay();
           updatePayload.sentBy = userName;
         }
 
