@@ -268,7 +268,13 @@ exports.singleUpload = async (req, res) => {
     if (!userId) {
       return res
         .status(400)
-        .json({ success: false, message: "User ID is required" });
+        .json({ success: false, message: "User ID is missing" });
+    }
+
+    if (!ReferBy) {
+      return res
+        .status(400)
+        .json({ success: false, message: "ReferBy is missing" });
     }
     if (userId && clientId) {
       NameUploadBy = userId;
@@ -424,280 +430,6 @@ exports.singleUpload = async (req, res) => {
     });
   }
 };
-
-// exports.bulkUpload = async (req, res) => {
-//   try {
-//     const { data } = req.body;
-//     let manualMapping = ''
-//     let normalizedProduct = ''
-
-//     if (!data || !Array.isArray(data) || data.length === 0) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid or empty data",
-//       });
-//     }
-
-//     const currentDate = moment().format("YYYY-MM-DD");
-//     const results = {
-//       inserted: 0,
-//       fileDuplicates: 0,
-//       dbDuplicates: 0,
-//       failed: 0,
-//       failedRecords: [],
-//     };
-
-//     const fileDuplicateTracker = new Set();
-//     const insertDocs = [];
-//     const dbKeys = [];
-//     const uniqueUserIds = new Set();
-//     const clientCodeSet = new Set();
-
-//     // STEP 1: Collect IDs for preloading
-//     for (const row of data) {
-//       const userId = row.userId?.trim();
-//       const clientId = row.clientId?.trim();
-
-//       if (userId) uniqueUserIds.add(userId);
-//       if (clientId) clientCodeSet.add(clientId);
-//     }
-
-//     // STEP 2: Preload Users for mapping
-//     const users = await User.find({
-//       $or: [
-//         { userId: { $in: Array.from(uniqueUserIds) } },
-//         { clientCode: { $in: Array.from(clientCodeSet) } }
-//       ]
-//     });
-
-//     // STEP 3: Preprocess rows & build dbKeys
-//     for (const row of data) {
-//       const accountNumber = String(row.accountNumber || "").trim();
-//       const product = String(row.product || "").trim();
-//       const requirement = String(row.requirement || "").trim();
-//       const name = String(row.name || "").trim();
-//       const userId = row.userId?.trim();
-//       const clientId = row.clientId?.trim();
-//       const ReferBy = row.ReferBy?.trim();
-
-//       if (!userId) {
-//         return res.status(400).json({ success: false, message: "User ID is required" });
-//       }
-//       if (!name || !accountNumber || !product || !requirement) {
-//         results.failed++;
-//         results.failedRecords.push({ ...row, error: "Missing required fields" });
-//         continue;
-//       }
-
-//       normalizedProduct = normalizeProductName(product);
-//       manualMapping = await RevisedProduct.findOne({ productName:normalizedProduct });
-
-//       if (!manualMapping) {
-//         results.failed++;
-//         results.failedRecords.push({ ...row, error: "Wrong Product Name" });
-//         console.log("Result:",results)
-//         continue;
-//       }
-
-//       // Resolve actual clientCode (same logic as singleUpload)
-//       let resolvedClientCode = "";
-//       if (userId && clientId) {
-//         const user = users.find(u => u.clientCode === clientId);
-//         if (!user) {
-//           results.failed++;
-//           results.failedRecords.push({ ...row, error: `No user found with client code ${clientId}` });
-//           continue;
-//         }
-//         resolvedClientCode = clientId;
-//       } else if (userId && !clientId) {
-//         const user = users.find(u => u.userId === userId);
-//         if (!user) {
-//           results.failed++;
-//           results.failedRecords.push({ ...row, error: `No user found with userId ${userId}` });
-//           continue;
-//         }
-//         resolvedClientCode = user.clientCode;
-//       }
-
-//       // Check for file-level duplicate
-//       const fileKey = `${accountNumber}-${product}-${requirement}-${resolvedClientCode}`;
-//       if (fileDuplicateTracker.has(fileKey)) {
-//         results.fileDuplicates++;
-//         continue;
-//       }
-//       fileDuplicateTracker.add(fileKey);
-
-//       // Add to dbKeys for same-day DB duplicate check
-//       dbKeys.push({
-//         accountNumber,
-//         product,
-//         requirement,
-//         clientCode: resolvedClientCode
-//       });
-
-//       insertDocs.push({
-//         original: row,
-//         name,
-//         product,
-//         accountNumber,
-//         requirement,
-//         userId,
-//         clientCode: resolvedClientCode,
-//         ReferBy
-//       });
-//     }
-
-//     // STEP 4: Preload existing same-day KYC records
-//     const existingRecords = await KYC.find({
-//       $or: dbKeys.map(key => ({
-//         accountNumber: key.accountNumber,
-//         product: key.product,
-//         requirement: key.requirement,
-//         clientCode: key.clientCode,
-//         createdAt: {
-//           $gte: new Date(`${currentDate}T00:00:00Z`),
-//           $lt: new Date(`${currentDate}T23:59:59Z`),
-//         },
-//       })),
-//     });
-
-//     const existingSet = new Set(
-//       existingRecords.map(
-//         r => `${r.accountNumber}-${r.product}-${r.requirement}-${r.clientCode}`
-//       )
-//     );
-
-//     // STEP 5: Process insertable docs
-//     const bulkInsert = [];
-//     for (const item of insertDocs) {
-//       const { original, name, product, accountNumber, requirement, userId, clientCode, ReferBy } = item;
-
-//       const uniqueKey = `${accountNumber}-${product}-${requirement}-${clientCode}`;
-//       if (existingSet.has(uniqueKey)) {
-//         results.dbDuplicates++;
-//         continue;
-//       }
-
-//       // Standardize product
-
-//       let standardized = {};
-//       if (manualMapping) {
-//         standardized = {
-//           upn: manualMapping.correctUPN,
-//           productType: manualMapping.productType,
-//         };
-//       } else {
-//         standardized = {
-//         upn: "Not Mapped",
-//         productType: "Not Mapped",
-//         };
-//       }
-
-//       // ITO Dedup
-//       let isduplicate = false;
-//       if (standardized.productType === "ITO") {
-//         const existingITO = await KYC.find({ accountNumber, product: normalizeProductName });
-//         if (existingITO.length > 0) {
-//           isduplicate = true;
-//           for (const record of existingITO) {
-//             record.isDedup = true;
-//             await record.save();
-//           }
-//         }
-//       }
-
-//       // Employee / Customer care
-//       const employees = await ClientCode.find({ clientCode });
-//       const empName = employees[0]?.EmployeeName || "";
-//       let customerCare = "";
-//       if (empName) {
-//         const employee = await User.findOne({ name: empName });
-//         customerCare = employee?.phoneNumber || "";
-//       }
-
-//       // Vendor
-//       const vendor = await Allvendors.findOne({
-//         productName: normalizedProduct,
-//         vendorType: 'default'
-//       });
-//       const vendorName = vendor?.vendorName || "not found";
-
-//       // IP address
-//       let ipAddress = getIPAddress(req);
-//       if (ipAddress === "::1" || ipAddress === "127.0.0.1") {
-//         try {
-//           const ipRes = await axios.get("https://api64.ipify.org?format=json");
-//           ipAddress = ipRes.data.ip;
-//         } catch {
-//           ipAddress = "unknown";
-//         }
-//       }
-
-//       const date = new Date();
-//       const uniqueCaseId = await generateUniqueCaseId();
-
-//       bulkInsert.push({
-//         name,
-//         product,
-//         accountNumber,
-//         requirement,
-//         userId,
-//         caseId: uniqueCaseId || generateCaseId(),
-//         dateIn: getFormattedDateTime(),
-//         dateInDate: getFormattedDateDay(),
-//         accountNumberDigit: countDigits(accountNumber),
-//         correctUPN: standardized.upn,
-//         productType: standardized.productType,
-//         clientCode,
-//         listByEmployee: empName,
-//         clientType: await getClientType(clientCode),
-//         vendorName,
-//         customerCare,
-//         NameUploadBy: userId,
-//         ipAddress,
-//         ReferBy: ReferBy || "",
-//         isDedup: isduplicate,
-//         year: date.getFullYear().toString(),
-//         month: (date.getMonth() + 1).toString().padStart(2, '0')
-//       });
-//     }
-
-//     // STEP 6: Bulk insert
-//     if (bulkInsert.length > 0) {
-//       await KYC.insertMany(bulkInsert);
-//       results.inserted = bulkInsert.length;
-//     }
-
-//     // STEP 7: Response
-//     // if (results.inserted === 0 && results.failed === data.length) {
-//     //   return res.status(400).json({
-//     //     success: false,
-//     //     message: "Please check client-code is assigned with active client",
-//     //     details: results,
-//     //   });
-//     // }
-
-//     res.json({
-//       success: true,
-//       message: `Processed ${data.length} records`,
-//       stats: {
-//         totalRecords: data.length,
-//         inserted: results.inserted,
-//         fileDuplicates: results.fileDuplicates,
-//         dbDuplicates: results.dbDuplicates,
-//         failed: results.failed,
-//         failedRecords: results.failedRecords,
-//       },
-//     });
-//   } catch (error) {
-//     console.error("Bulk Upload Error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Bulk upload failed",
-//       error: error.message,
-//     });
-//   }
-// };
 
 exports.bulkUpload = async (req, res) => {
   try {
@@ -1110,9 +842,17 @@ exports.processRecords = async (req, res) => {
 
     // Validate userId
     if (!userId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "User ID is required" });
+      return res.status(400).json({
+        success: false,
+        message: "User ID field is missing",
+      });
+    }
+
+    if (!ReferBy) {
+      return res.status(400).json({
+        success: false,
+        message: "ReferBy field is missing",
+      });
     }
 
     // Get file from S3 again
