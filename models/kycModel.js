@@ -1,14 +1,15 @@
 const mongoose = require("mongoose");
 
-const trackerSchema = new mongoose.Schema({
-    userId: {type: String, default: "" }, 
-    caseId:{type: String, default: "" },
+const trackerSchema = new mongoose.Schema(
+  {
+    userId: { type: String, default: "" },
+    caseId: { type: String, default: "" },
     remarks: { type: String, default: "" },
     name: { type: String, default: "" },
     details: { type: String, default: "" },
     details1: { type: String, default: "" },
     priority: { type: String, default: "" },
-    correctUPN: { type: String, default: ""},
+    correctUPN: { type: String, default: "" },
     product: { type: String, default: "" },
     updatedProductName: { type: String, default: "" },
     accountNumber: { type: String, default: "" },
@@ -35,21 +36,22 @@ const trackerSchema = new mongoose.Schema({
     sentDateInDay: { type: String, default: "" },
     clientType: { type: String, default: "" },
     dedupBy: { type: String, default: "" },
-    vendorRate: { type: String, default:"" },
-    clientRate: { type: String, default:"" },
-    NameUploadBy: { type: String, default:"" },
-    ReferBy: { type: String, default:"" },
+    vendorRate: { type: String, default: "" },
+    clientRate: { type: String, default: "" },
+    NameUploadBy: { type: String, default: "" },
+    ReferBy: { type: String, default: "" },
     isRechecked: { type: Boolean, default: false },
     isDedup: { type: Boolean, default: false },
-    recheckedAt: { type: Date },
-    ipAddress:{ type: String, default: "" },
-    vendorStatus:{ type: String, default: "" },
+    recheckedAt: { type: String, default: "" },
+    ipAddress: { type: String, default: "" },
+    vendorStatus: { type: String, default: "" },
     year: { type: String }, // Add year field
     month: { type: String }, // Add month field
-    role: { type: String, enum: ["admin", "employee", "client"]},
-    ModifyedAt:{ type: String,default: ""  },
-    attachments: [{
-        caseId:String,
+    role: { type: String, enum: ["admin", "employee", "client"] },
+    ModifyedAt: { type: String, default: "" },
+    attachments: [
+      {
+        caseId: String,
         filename: String,
         originalname: String,
         mimetype: String,
@@ -57,9 +59,12 @@ const trackerSchema = new mongoose.Schema({
         path: String,
         location: String,
         key: String,
-        uploadedAt:String
-      }],
-}, { timestamps: true });
+        uploadedAt: String,
+      },
+    ],
+  },
+  { timestamps: true }
+);
 
 trackerSchema.index({ year: 1 });
 trackerSchema.index({ month: 1 });
@@ -72,6 +77,5 @@ trackerSchema.index({ accountNumber: 1 });
 trackerSchema.index({ product: 1 });
 trackerSchema.index({ requirement: 1 });
 trackerSchema.index({ year: 1, month: 1, clientCode: 1 });
-
 
 module.exports = mongoose.model("KYCdoc", trackerSchema);
