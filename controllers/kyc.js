@@ -52,35 +52,15 @@ const getFormattedDateDay = () => {
   return moment().tz("Asia/Kolkata").format("DD-MM-YYYY, dddd");
 };
 
-// const getFormattedDateDay = () => {
-//   return moment().format("DD-MM-YYYY, dddd");
-// };
+function getCurrentMonth() {
+  return moment().tz("Asia/Kolkata").format("MM");
+}
 
-// // Function to get Date and Time
-// const getFormattedDateTime = () => {
-//   const date = new Date();
+function getCurrentYear() {
+  return moment().tz("Asia/Kolkata").format("YYYY");
+}
 
-//   // Get the date in YYYY-MM-DD format
-//   const formattedDate = date.toISOString().split("T")[0];
 
-//   // Get the time in HH:MM:SS format
-//   const time = date.toLocaleTimeString();
-
-//   return `${formattedDate}, ${time}`;
-// };
-
-// // Function to get Date and Day
-// const getFormattedDateDay = () => {
-//   const date = new Date();
-
-//   // Get the day of the week (e.g., 'Monday', 'Tuesday', etc.)
-//   const day = date.toLocaleString("en-US", { weekday: "long" });
-
-//   // Get the date in YYYY-MM-DD format
-//   const formattedDate = date.toISOString().split("T")[0];
-
-//   return `${formattedDate}, ${day}`;
-// };
 
 function countDigits(accountNumber) {
   return accountNumber.toString().length;
@@ -89,11 +69,11 @@ let products = [];
 let fuse;
 
 const getData = async () => {
-  products = await Product.find({}); // Fetch products from the database
+  products = await Product.find({}); 
 
-  // Initialize Fuse.js after products are fetched
+  
   const fuseOptions = {
-    keys: ["productName"], // Field to search (productName)
+    keys: ["productName"], 
     threshold: 0.3, // Adjust threshold for fuzzy matching
     includeScore: true, // Include match score in results
   };
@@ -102,7 +82,7 @@ const getData = async () => {
 
 const findBestMatch = async (productName) => {
   if (!fuse) {
-    await getData(); // Ensure products are fetched and fuse is initialized
+    await getData(); 
   }
 
   const results = fuse.search(productName);
@@ -124,54 +104,6 @@ const findBestMatch = async (productName) => {
   return null;
 };
 
-// utils/clientTypeMapper.js
-
-// const getClientType = (clientCode) => {
-//   const cleanedCode = clientCode.trim().replace(/\s+/g, "").toUpperCase();
-
-//   const agencyCodes = new Set([
-//     "OG",
-//     "KM",
-//     "PMC",
-//     "MT",
-//     "TG",
-//     "VEN",
-//     "SK",
-//     "RF",
-//     "ALT",
-//     "SS",
-//     "CCS",
-//     "RCA",
-//     "UR",
-//     "PRA",
-//     "GL",
-//     "AP",
-//     "HF",
-//     "CV",
-//     "VG",
-//     "VG-1",
-//     "CCC",
-//   ]);
-
-//   const corporateCodes = new Set([
-//     "ILC",
-//     "PRO",
-//     "NTK-2",
-//     "NTK-3",
-//     "NTK-4",
-//     "AC",
-//     "HAIER",
-//     "ATT",
-//   ]);
-
-//   const otherCodes = new Set(["BK", "SATNAM", "DEE", "JAI"]);
-
-//   if (agencyCodes.has(cleanedCode)) return "AGENCY";
-//   if (corporateCodes.has(cleanedCode)) return "CORPORATE";
-//   if (otherCodes.has(cleanedCode)) return "OTHER";
-
-//   return "UNKNOWN";
-// };
 const getClientType = async (clientCode) => {
   if (!clientCode) return "UNKNOWN";
   // console.log(clientCode)
@@ -364,6 +296,7 @@ exports.singleUpload = async (req, res) => {
     }
 
     // Get additional data
+    console.log("month:",(date.getMonth() + 1).toString().padStart(2, "0"))
     const employees = await ClientCode.find({ clientCode: userclientcode });
     const empName = employees[0]?.EmployeeName || "";
     let customerCare = "";
@@ -408,8 +341,8 @@ exports.singleUpload = async (req, res) => {
       NameUploadBy,
       ipAddress,
       ReferBy: ReferBy || "",
-      year: date.getFullYear().toString(),
-      month: (date.getMonth() + 1).toString().padStart(2, "0"),
+      year: getCurrentYear(),
+      month: getCurrentMonth(),
       isDedup: isduplicate,
       ModifyedAt: "",
     });
@@ -675,6 +608,8 @@ exports.bulkUpload = async (req, res) => {
 
       const date = new Date();
 
+      console.log("month:",(date.getMonth() + 1).toString().padStart(2, "0"))
+
       insertDocs.push({
         name,
         product,
@@ -696,8 +631,8 @@ exports.bulkUpload = async (req, res) => {
         ipAddress,
         ReferBy: ReferBy || "",
         isDedup: isITOduplicate,
-        year: date.getFullYear().toString(),
-        month: (date.getMonth() + 1).toString().padStart(2, "0"),
+        year: getCurrentYear(),
+        month: getCurrentMonth(),
         ModifyedAt: "",
       });
     }
@@ -1040,6 +975,8 @@ async function processBatch(
 
       const vandorname = vendor?.vendorName || "not found";
       const uniqueCaseId = await generateUniqueCaseId();
+      
+      console.log("month:",(new Date().getMonth() + 1).toString().padStart(2, "0"))
 
       // Create new record
       await KYC.create({
@@ -1063,8 +1000,8 @@ async function processBatch(
         NameUploadBy: userId,
         ipAddress,
         ReferBy: ReferBy || "",
-        year: new Date().getFullYear().toString(),
-        month: (new Date().getMonth() + 1).toString().padStart(2, "0"),
+        year:getCurrentYear(),
+        month:getCurrentMonth(),
         isDedup: isduplicate,
         ModifyedAt: "",
       });
@@ -2229,10 +2166,6 @@ exports.updateTrackerData = async (req, res) => {
                 updatePayload.clientTAT = tat;
               }
             }
-            // updatePayload.clientTAT = calculateTAT(
-            //   parseCustomDateTime(doc.dateIn),
-            //   updatePayload.dateOut
-            // );
           }
         }
 
@@ -2275,86 +2208,8 @@ exports.updateTrackerData = async (req, res) => {
     });
   }
 };
-// exports.updateTrackerData = async (req, res) => {
-//   try {
-//     const { updatedData } = req.body;
 
-//     if (!Array.isArray(updatedData)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Expected array of updates"
-//       });
-//     }
 
-//     const results = await Promise.all(updatedData.map(async (update) => {
-//       // Validate required fields
-//       const { caseId, changedField, userId, userName } = update;
-//       const newValue = update[changedField];
-
-//       if (!caseId || !changedField || newValue === undefined) {
-//         throw new Error(`Invalid update format: ${JSON.stringify(update)}`);
-//       }
-
-//       if (!userId || !userName) {
-//         throw new Error("User information missing in update");
-//       }
-
-//       // Prepare update payload
-//       const updatePayload = {
-//         [changedField]: newValue,
-//         updatedAt: new Date(),
-//         updatedBy: userName,
-//         updatedById: userId
-//       };
-
-//       // Special field handling
-//       if (changedField === 'status' && newValue === "Closed") {
-//         updatePayload.dateOut = getFormattedDateTime();
-//         updatePayload.caseDoneBy = userName;
-
-//         const doc = await KYC.findOne({ caseId });
-//         if (doc?.dateIn) {
-//           updatePayload.clientTAT = calculateTAT(
-//             parseCustomDateTime(doc.dateIn),
-//             updatePayload.dateOut
-//           );
-//         }
-//       }
-
-//       if (changedField === 'caseStatus' && newValue === "Sent") {
-//         updatePayload.sentDate = getFormattedDateTime();
-//         updatePayload.sentBy = userName;
-//       }
-
-//       // Apply update
-//       const updatedDoc = await KYC.findOneAndUpdate(
-//         { caseId },
-//         { $set: updatePayload },
-//         { new: true, runValidators: true }
-//       );
-
-//       if (!updatedDoc) {
-//         throw new Error(`Case ${caseId} not found`);
-//       }
-
-//       return updatedDoc;
-//     }));
-
-//     res.json({
-//       success: true,
-//       updatedDocuments: results
-//     });
-
-//   } catch (error) {
-//     console.error("Update Error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: error.message
-//     });
-//   }
-// };
-
-// Helper functions
 async function handleStatusClosed(caseId, updatePayload, user) {
   const now = new Date();
   updatePayload.dateOut = now;
@@ -5057,7 +4912,10 @@ function calculateTAT(sentDateStr, dateOutStr) {
 
 exports.batchUpdate = async (req, res) => {
   try {
-    const { caseIds, updates } = req.body;
+    const { caseIds, updates,userName } = req.body;
+
+    // console.log("req.body:",req.body)
+    console.log("userName:",userName)
 
     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
       return res
@@ -5066,8 +4924,8 @@ exports.batchUpdate = async (req, res) => {
     }
 
     if (
-      !updates ||
-      typeof updates !== "object" ||
+      !updates || !userName ||
+      typeof updates !== "object" || 
       Object.keys(updates).length === 0
     ) {
       return res
@@ -5109,13 +4967,23 @@ exports.batchUpdate = async (req, res) => {
 
         // Handle caseStatus = Sent
         if (updates.caseStatus === "Sent") {
-          if (!updates.sentBy) updateFields.sentBy = "System";
+          if (!updates.sentBy) updateFields.sentBy = userName;
           if (!updates.sentDate) updateFields.sentDate = getFormattedDateTime();
+          if (!updates.sentDateInDay) updateFields.sentDateInDay = getFormattedDateDay();
+        }
+
+        let validDateOut = ''
+
+        if (updates.status === "Closed") {
+          if (!updates.caseDoneBy) updateFields.caseDoneBy = userName;
+          if (!updates.dateOut) updateFields.dateOut = getFormattedDateTime();
+          if (!updates.dateOutInDay) updateFields.sentDateInDay = dateOutInDay();
+           validDateOut = getFormattedDateTime()
         }
 
         // ✅ Calculate clientTAT if both sentDate and dateOut are available
         const sentDate = updates.sentDate || caseDoc.sentDate;
-        const dateOut = updates.dateOut || caseDoc.dateOut;
+        const dateOut = updates.dateOut || caseDoc.dateOut ||  validDateOut;
 
         if (sentDate && dateOut) {
           const tat = calculateTAT(sentDate, dateOut);
