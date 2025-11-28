@@ -295,8 +295,6 @@ exports.singleUpload = async (req, res) => {
       }
     }
 
-    // Get additional data
-    console.log("month:",(date.getMonth() + 1).toString().padStart(2, "0"))
     const employees = await ClientCode.find({ clientCode: userclientcode });
     const empName = employees[0]?.EmployeeName || "";
     let customerCare = "";
@@ -451,7 +449,6 @@ exports.bulkUpload = async (req, res) => {
     const allClientCodes = await ClientCode.find({
       clientCode: { $in: Array.from(clientCodeSet) },
     }).lean();
-    console.log("allClientCodes", allClientCodes);
 
     const clientCodeEmpMap = {};
     allClientCodes.forEach((c) => {
@@ -608,7 +605,7 @@ exports.bulkUpload = async (req, res) => {
 
       const date = new Date();
 
-      console.log("month:",(date.getMonth() + 1).toString().padStart(2, "0"))
+      
 
       insertDocs.push({
         name,
@@ -976,8 +973,7 @@ async function processBatch(
       const vandorname = vendor?.vendorName || "not found";
       const uniqueCaseId = await generateUniqueCaseId();
       
-      console.log("month:",(new Date().getMonth() + 1).toString().padStart(2, "0"))
-
+      
       // Create new record
       await KYC.create({
         name,
@@ -1121,6 +1117,7 @@ exports.updateColumnConfig = async (req, res) => {
 };
 
 // Updated getTrackerData function using column config
+
 exports.getTrackerData = async (req, res) => {
   try {
     const {
@@ -1148,10 +1145,6 @@ exports.getTrackerData = async (req, res) => {
     } = req.query;
 
     const skip = (page - 1) * pageSize;
-
-    // In your server endpoint, before the query
-
-    // After building the query
 
     // Get column order for this role
     const config = await ColumnConfig.findOne({ role });
@@ -1323,81 +1316,6 @@ exports.getTrackerData = async (req, res) => {
 
       return dates.join("|");
     }
-    //  if (dateInStart || dateInEnd) {
-    //       if (dateInStart && dateInEnd) {
-    //         // RANGE QUERY - handle as string comparison
-    //         const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
-    //         const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
-
-    //         if (startDate === endDate) {
-    //           query.dateIn = { $regex: `^${startDate}` };
-    //         } else {
-
-    //           query.$and = [
-    //             {
-    //               dateIn: {
-    //                 $gte: `${startDate}, 00:00:00 AM`,
-    //                 $lte: `${endDate}, 11:59:59 PM`
-    //               }
-    //             }
-    //           ];
-    //         }
-    //       }
-    //       else if (dateInStart) {
-
-    //         const dateStr = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
-    //         query.dateIn = { $regex: `^${dateStr}` };
-    //       }
-    //       else if (dateInEnd) {
-
-    //         const dateStr = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
-    //         query.dateIn = { $lte: `${dateStr}, 11:59:59 PM` };
-    //       }
-    //     }
-
-    //     if (dateOutStart || dateOutEnd) {
-    //   // Initialize dateOut filter object
-    //   const dateOutFilter = {};
-
-    //   // Format dates consistently
-    //   const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
-    //   const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
-
-    //   // Case 1: Both start and end dates provided
-    //   if (startDateStr && endDateStr) {
-    //     if (startDateStr === endDateStr) {
-    //       // Single day match - use regex for exact day
-    //       dateOutFilter.$regex = `^${startDateStr}`;
-    //     } else {
-    //       // Date range - use string comparison
-    //       dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
-    //       dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
-    //     }
-    //   }
-    //   // Case 2: Only start date provided
-    //   else if (startDateStr) {
-    //     dateOutFilter.$regex = `^${startDateStr}`;
-    //   }
-    //   // Case 3: Only end date provided
-    //   else if (endDateStr) {
-    //     dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
-    //   }
-
-    //   // Only apply the filter if we have valid conditions
-    //   if (Object.keys(dateOutFilter).length > 0) {
-    //     // Exclude empty dateOut values and apply the filter
-    //     query.dateOut = {
-    //       ...dateOutFilter,
-    //       $ne: "", // Exclude empty values
-    //       $exists: true // Ensure field exists
-    //     };
-
-    //     // For range queries, we need to ensure we don't match invalid date strings
-    //     if (dateOutFilter.$gte || dateOutFilter.$lte) {
-    //       query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
-    //     }
-    //   }
-    // }
 
     Object.entries(filters).forEach(([key, value]) => {
       if (Array.isArray(value) && value.length > 0) {
@@ -1412,7 +1330,9 @@ exports.getTrackerData = async (req, res) => {
       };
     }
 
+    // CRITICAL FIX: Handle role-based queries with 30-day restriction for clients
     if (role === "admin") {
+      // No restrictions for admin - use existing query as is
     } else if (role === "employee") {
       query.listByEmployee = name;
     } else if (role === "client") {
@@ -1423,12 +1343,38 @@ exports.getTrackerData = async (req, res) => {
           .json({ success: false, message: "User not found" });
       }
 
+      // Calculate date 30 days ago
+      const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
+      const today = moment().format("DD-MM-YYYY");
+      
+      // Generate regex for last 30 days
+      const last30DaysRegex = new RegExp(
+        `^(${generateDateRangeRegex(thirtyDaysAgo, today)})`
+      );
+
+      // Build the client query with 30-day restriction that CANNOT be overridden
       query = {
         $and: [
-          query,
+          // Existing search/filters (will be combined with 30-day restriction)
+          ...(Object.keys(query).length > 0 ? [query] : []),
+          
+          // Client access restriction
           {
-            $or: [{ userId: user.userId }, { clientCode: user.clientCode }],
+            $or: [
+              { userId: user.userId }, 
+              { clientCode: user.clientCode }
+            ],
           },
+          
+          // 30-day restriction - this will ALWAYS apply regardless of other filters
+          {
+            $or: [
+              // Use createdAt if available (more reliable)
+              { createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+              // Fallback to dateIn field with regex matching
+              { dateIn: last30DaysRegex }
+            ]
+          }
         ],
       };
     } else {
@@ -1436,7 +1382,7 @@ exports.getTrackerData = async (req, res) => {
         .status(400)
         .json({ success: false, message: "Invalid role specified" });
     }
-    // console.log("query:",query)
+
     const [trackerData, totalCount] = await Promise.all([
       KYC.find(query, projection, filters)
         .sort({ _id: -1 })
@@ -1513,10 +1459,16 @@ exports.getTrackerData = async (req, res) => {
 //       sentDate,
 //       vendorStatus,
 //       priority,
-//       clientType
+//       clientType,
+//       clientCode,
+//       ...filters
 //     } = req.query;
 
 //     const skip = (page - 1) * pageSize;
+
+//     // In your server endpoint, before the query
+
+//     // After building the query
 
 //     // Get column order for this role
 //     const config = await ColumnConfig.findOne({ role });
@@ -1525,13 +1477,14 @@ exports.getTrackerData = async (req, res) => {
 //     if (!columnOrder) {
 //       // Fallback to all fields if no config exists
 //       columnOrder = Object.keys(KYC.schema.paths).filter(
-//         field => !['_id', '__v', 'createdAt','userId', 'updatedAt'].includes(field)
+//         (field) =>
+//           !["_id", "__v", "createdAt", "userId", "updatedAt"].includes(field)
 //       );
 //     }
 
 //     // Build projection based on column order
 //     const projection = {};
-//     columnOrder.forEach(field => {
+//     columnOrder.forEach((field) => {
 //       projection[field] = 1;
 //     });
 //     projection._id = 0;
@@ -1540,14 +1493,55 @@ exports.getTrackerData = async (req, res) => {
 
 //     // Search functionality
 //     if (searchQuery) {
+//       const regex = { $regex: searchQuery, $options: "i" };
+
 //       query.$or = [
-//         { caseId: { $regex: searchQuery, $options: 'i' } },
-//         { accountNumber: { $regex: searchQuery, $options: 'i' } },
-//         { name: { $regex: searchQuery, $options: 'i' } },
-//         { clientCode: { $regex: searchQuery, $options: 'i' } },
-//         { bankCode: { $regex: searchQuery, $options: 'i' } },
-//         { details: { $regex: searchQuery, $options: 'i' } },
-//         { remarks: { $regex: searchQuery, $options: 'i' } }
+//         { caseId: regex },
+//         { userId: regex },
+//         { remarks: regex },
+//         { name: regex },
+//         { details: regex },
+//         { details1: regex },
+//         { priority: regex },
+//         { correctUPN: regex },
+//         { product: regex },
+//         { updatedProductName: regex },
+//         { accountNumber: regex },
+//         { requirement: regex },
+//         { updatedRequirement: regex },
+//         { accountNumberDigit: regex },
+//         { bankCode: regex },
+//         { clientCode: regex },
+//         { vendorName: regex },
+//         { dateIn: regex },
+//         { dateInDate: regex },
+//         { status: regex },
+//         { caseStatus: regex },
+//         { productType: regex },
+//         { listByEmployee: regex },
+//         { dateOut: regex },
+//         { dateOutInDay: regex },
+//         { sentBy: regex },
+//         { autoOrManual: regex },
+//         { caseDoneBy: regex },
+//         { clientTAT: regex },
+//         { customerCare: regex },
+//         { sentDate: regex },
+//         { sentDateInDay: regex },
+//         { clientType: regex },
+//         { dedupBy: regex },
+//         { vendorRate: regex },
+//         { clientRate: regex },
+//         { NameUploadBy: regex },
+//         { ReferBy: regex },
+//         { ipAddress: regex },
+//         { vendorStatus: regex },
+//         { year: regex },
+//         { month: regex },
+//         { role: regex },
+//         { "attachments.filename": regex },
+//         { "attachments.originalname": regex },
+//         { "attachments.key": regex },
 //       ];
 //     }
 
@@ -1558,70 +1552,223 @@ exports.getTrackerData = async (req, res) => {
 //     if (caseStatus) query.caseStatus = caseStatus;
 //     if (vendorStatus) query.vendorStatus = vendorStatus;
 //     if (priority) query.priority = priority;
+//     if (clientCode) query.clientCode = clientCode;
 //     if (clientType) query.clientType = clientType;
 
-//     // Date range filters
+//     // Enhanced date filtering with debugging
+//     // Enhanced dateIn filtering
 //     if (dateInStart || dateInEnd) {
-//       query.dateIn = {};
-//       if (dateInStart) {
-//         query.dateIn.$gte = moment(dateInStart, "DD-MM-YYYY").startOf('day').toDate();
+//       const dateInFilter = {};
+
+//       const startDateStr = dateInStart
+//         ? moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY")
+//         : null;
+//       const endDateStr = dateInEnd
+//         ? moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY")
+//         : null;
+
+//       if (startDateStr && endDateStr) {
+//         if (startDateStr === endDateStr) {
+//           dateInFilter.$regex = `^${startDateStr}`;
+//         } else {
+//           // For range queries, use regex to match the date part only
+//           dateInFilter.$regex = new RegExp(
+//             `^(${generateDateRangeRegex(startDateStr, endDateStr)})`
+//           );
+//         }
+//       } else if (startDateStr) {
+//         dateInFilter.$regex = `^${startDateStr}`;
+//       } else if (endDateStr) {
+//         dateInFilter.$regex = new RegExp(
+//           `^(${generateDateRangeRegex("01-01-2000", endDateStr)})`
+//         );
 //       }
-//       if (dateInEnd) {
-//         query.dateIn.$lte = moment(dateInEnd, "DD-MM-YYYY").endOf('day').toDate();
+
+//       if (Object.keys(dateInFilter).length > 0) {
+//         query.dateIn = dateInFilter;
 //       }
 //     }
 
+//     // Enhanced dateOut filtering
 //     if (dateOutStart || dateOutEnd) {
-//       query.dateOut = {};
-//       if (dateOutStart) {
-//         query.dateOut.$gte = moment(dateOutStart, "DD-MM-YYYY").startOf('day').toDate();
+//       const dateOutFilter = {};
+
+//       const startDateStr = dateOutStart
+//         ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY")
+//         : null;
+//       const endDateStr = dateOutEnd
+//         ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY")
+//         : null;
+
+//       if (startDateStr && endDateStr) {
+//         if (startDateStr === endDateStr) {
+//           dateOutFilter.$regex = `^${startDateStr}`;
+//         } else {
+//           // For range queries, use regex to match the date part only
+//           dateOutFilter.$regex = new RegExp(
+//             `^(${generateDateRangeRegex(startDateStr, endDateStr)})`
+//           );
+//         }
+//       } else if (startDateStr) {
+//         dateOutFilter.$regex = `^${startDateStr}`;
+//       } else if (endDateStr) {
+//         dateOutFilter.$regex = new RegExp(
+//           `^(${generateDateRangeRegex("01-01-2000", endDateStr)})`
+//         );
 //       }
-//       if (dateOutEnd) {
-//         query.dateOut.$lte = moment(dateOutEnd, "DD-MM-YYYY").endOf('day').toDate();
+
+//       if (Object.keys(dateOutFilter).length > 0) {
+//         query.dateOut = {
+//           ...dateOutFilter,
+//           $ne: "",
+//           $exists: true,
+//         };
 //       }
 //     }
+
+//     // Helper function to generate regex for date range
+//     function generateDateRangeRegex(startDate, endDate) {
+//       const start = moment(startDate, "DD-MM-YYYY");
+//       const end = moment(endDate, "DD-MM-YYYY");
+//       const dates = [];
+
+//       let current = start.clone();
+//       while (current <= end) {
+//         dates.push(current.format("DD-MM-YYYY"));
+//         current.add(1, "day");
+//       }
+
+//       return dates.join("|");
+//     }
+//     //  if (dateInStart || dateInEnd) {
+//     //       if (dateInStart && dateInEnd) {
+//     //         // RANGE QUERY - handle as string comparison
+//     //         const startDate = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+//     //         const endDate = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+
+//     //         if (startDate === endDate) {
+//     //           query.dateIn = { $regex: `^${startDate}` };
+//     //         } else {
+
+//     //           query.$and = [
+//     //             {
+//     //               dateIn: {
+//     //                 $gte: `${startDate}, 00:00:00 AM`,
+//     //                 $lte: `${endDate}, 11:59:59 PM`
+//     //               }
+//     //             }
+//     //           ];
+//     //         }
+//     //       }
+//     //       else if (dateInStart) {
+
+//     //         const dateStr = moment(dateInStart, "DD-MM-YYYY").format("DD-MM-YYYY");
+//     //         query.dateIn = { $regex: `^${dateStr}` };
+//     //       }
+//     //       else if (dateInEnd) {
+
+//     //         const dateStr = moment(dateInEnd, "DD-MM-YYYY").format("DD-MM-YYYY");
+//     //         query.dateIn = { $lte: `${dateStr}, 11:59:59 PM` };
+//     //       }
+//     //     }
+
+//     //     if (dateOutStart || dateOutEnd) {
+//     //   // Initialize dateOut filter object
+//     //   const dateOutFilter = {};
+
+//     //   // Format dates consistently
+//     //   const startDateStr = dateOutStart ? moment(dateOutStart, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+//     //   const endDateStr = dateOutEnd ? moment(dateOutEnd, "DD-MM-YYYY").format("DD-MM-YYYY") : null;
+
+//     //   // Case 1: Both start and end dates provided
+//     //   if (startDateStr && endDateStr) {
+//     //     if (startDateStr === endDateStr) {
+//     //       // Single day match - use regex for exact day
+//     //       dateOutFilter.$regex = `^${startDateStr}`;
+//     //     } else {
+//     //       // Date range - use string comparison
+//     //       dateOutFilter.$gte = `${startDateStr}, 00:00:00 AM`;
+//     //       dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+//     //     }
+//     //   }
+//     //   // Case 2: Only start date provided
+//     //   else if (startDateStr) {
+//     //     dateOutFilter.$regex = `^${startDateStr}`;
+//     //   }
+//     //   // Case 3: Only end date provided
+//     //   else if (endDateStr) {
+//     //     dateOutFilter.$lte = `${endDateStr}, 11:59:59 PM`;
+//     //   }
+
+//     //   // Only apply the filter if we have valid conditions
+//     //   if (Object.keys(dateOutFilter).length > 0) {
+//     //     // Exclude empty dateOut values and apply the filter
+//     //     query.dateOut = {
+//     //       ...dateOutFilter,
+//     //       $ne: "", // Exclude empty values
+//     //       $exists: true // Ensure field exists
+//     //     };
+
+//     //     // For range queries, we need to ensure we don't match invalid date strings
+//     //     if (dateOutFilter.$gte || dateOutFilter.$lte) {
+//     //       query.dateOut.$regex = /^\d{2}-\d{2}-\d{4}, \d{2}:\d{2}:\d{2} [AP]M$/;
+//     //     }
+//     //   }
+//     // }
+
+//     Object.entries(filters).forEach(([key, value]) => {
+//       if (Array.isArray(value) && value.length > 0) {
+//         query[key] = { $in: value };
+//       }
+//     });
 
 //     if (sentDate) {
 //       query.sentDate = {
 //         $regex: `^${sentDate}`,
-//         $options: 'i'
+//         $options: "i",
 //       };
 //     }
 
-//     // Role-based query conditions
 //     if (role === "admin") {
-//       // No additional filters for admin
 //     } else if (role === "employee") {
 //       query.listByEmployee = name;
 //     } else if (role === "client") {
 //       const user = await User.findOne({ userId });
 //       if (!user) {
-//         return res.status(404).json({ success: false, message: "User not found" });
+//         return res
+//           .status(404)
+//           .json({ success: false, message: "User not found" });
 //       }
 
 //       query = {
-//         $or: [
-//           { userId: user.userId },
-//           { clientCode: user.clientCode }
-//         ]
+//         $and: [
+//           query,
+//           {
+//             $or: [{ userId: user.userId }, { clientCode: user.clientCode }],
+//           },
+//         ],
 //       };
 //     } else {
-//       return res.status(400).json({ success: false, message: "Invalid role specified" });
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "Invalid role specified" });
 //     }
-
+//     // console.log("query:",query)
 //     const [trackerData, totalCount] = await Promise.all([
-//       KYC.find(query, projection)
+//       KYC.find(query, projection, filters)
 //         .sort({ _id: -1 })
 //         .skip(skip)
 //         .limit(parseInt(pageSize)),
-//       KYC.countDocuments(query)
+//       KYC.countDocuments(query),
 //     ]);
 
-//     const orderedData = trackerData.map(doc => orderFields(doc, columnOrder));
+//     const orderedData = trackerData.map((doc) => orderFields(doc, columnOrder));
 
 //     // Include editable columns if needed
 //     if (role === "employee") {
-//       const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
+//       const employeeAccess = await EmployeeAccess.findOne({
+//         employeeName: name,
+//       });
 //       const editableColumns = employeeAccess?.editableColumns || [];
 //       return res.json({
 //         data: orderedData,
@@ -1630,8 +1777,8 @@ exports.getTrackerData = async (req, res) => {
 //           total: totalCount,
 //           page: parseInt(page),
 //           pageSize: parseInt(pageSize),
-//           totalPages: Math.ceil(totalCount / pageSize)
-//         }
+//           totalPages: Math.ceil(totalCount / pageSize),
+//         },
 //       });
 //     } else if (role === "client") {
 //       const clientAccess = await ClientAccess.findOne({ clientName: name });
@@ -1643,8 +1790,8 @@ exports.getTrackerData = async (req, res) => {
 //           total: totalCount,
 //           page: parseInt(page),
 //           pageSize: parseInt(pageSize),
-//           totalPages: Math.ceil(totalCount / pageSize)
-//         }
+//           totalPages: Math.ceil(totalCount / pageSize),
+//         },
 //       });
 //     }
 
@@ -1654,405 +1801,15 @@ exports.getTrackerData = async (req, res) => {
 //         total: totalCount,
 //         page: parseInt(page),
 //         pageSize: parseInt(pageSize),
-//         totalPages: Math.ceil(totalCount / pageSize)
-//       }
+//         totalPages: Math.ceil(totalCount / pageSize),
+//       },
 //     });
 //   } catch (error) {
 //     console.error("Error fetching tracker data:", error);
 //     res.status(500).json({ success: false, message: "Failed to fetch data" });
 //   }
 // };
-// exports.getTrackerData = async (req, res) => {
-//   try {
-//     const { role, userId, name , page = 1, pageSize = 50} = req.query;
-//     const skip = (page - 1) * pageSize;
 
-//     // Get column order for this role
-//     const config = await ColumnConfig.findOne({ role });
-//     let columnOrder = config?.columnOrder;
-
-//     if (!columnOrder) {
-//       // Fallback to all fields if no config exists
-//       columnOrder = Object.keys(KYC.schema.paths).filter(
-//         field => !['_id', '__v', 'createdAt','userId', 'updatedAt'].includes(field)
-//       );
-//     }
-
-//     // Build projection based on column order
-//     const projection = {};
-//     columnOrder.forEach(field => {
-//       projection[field] = 1;
-//     });
-//     projection._id = 0;
-
-//     let query = {};
-//     let populateOptions = [];
-
-//     if (role === "admin") {
-//       // No additional query filters for admin
-//       populateOptions = [{ path: "userId", select: "name email phoneNumber userId" }];
-//     } else if (role === "employee") {
-//       query.listByEmployee = name;
-//     } else if (role === "client") {
-//       const user = await User.findOne({ userId });
-//       if (!user) {
-//         return res.status(404).json({ success: false, message: "User not found" });
-//       }
-
-//       query = {
-//         $or: [
-//           { userId: user.userId },
-//           { clientCode: user.clientCode }
-//         ]
-//       };
-
-//       populateOptions = [{ path: "userId", select: "name email phoneNumber userId" }];
-//     } else {
-//       return res.status(400).json({ success: false, message: "Invalid role specified" });
-//     }
-
-//     // const trackerData = await KYC.find(query, projection)
-//     //   .populate(...populateOptions)
-//     //   .sort({ _id: -1 });
-
-//     const [trackerData, totalCount] = await Promise.all([
-//       KYC.find(query, projection)
-//         .populate(...populateOptions)
-//         .sort({ _id: -1 })
-//         .skip(skip)
-//         .limit(parseInt(pageSize)),
-//       KYC.countDocuments(query)
-//     ]);
-
-//     const orderedData = trackerData.map(doc => orderFields(doc, columnOrder));
-
-//     // Include editable columns if needed
-//     if (role === "employee") {
-//       const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
-//       const editableColumns = employeeAccess?.editableColumns || [];
-//       return res.json({ data: orderedData, editableColumns });
-//     } else if (role === "client") {
-//       const clientAccess = await ClientAccess.findOne({ clientName: name });
-//       const editableColumns = clientAccess?.editableColumns || [];
-//       return res.json({ data: orderedData, editableColumns });
-//     }
-
-//     // res.json(orderedData);
-//     res.json({
-//       data: orderedData,
-//       pagination: {
-//         total: totalCount,
-//         page: parseInt(page),
-//         pageSize: parseInt(pageSize),
-//         totalPages: Math.ceil(totalCount / pageSize)
-//       },});
-//   } catch (error) {
-//     console.error("Error fetching tracker data:", error);
-//     res.status(500).json({ success: false, message: "Failed to fetch data" });
-//   }
-// };
-
-// // Define field orders for each role
-// const FIELD_ORDERS = {
-//   admin: [
-//     'attachments',
-//     'caseId',
-//     'remarks',
-//     'name',
-//     'details',
-//     'details1',
-//     'priority',
-//     'correctUPN',
-//     'product',
-//     'updatedProductName',
-//     'accountNumber',
-//     'requirement',
-//     'accountNumberDigit',
-//     'bankCode',
-//     'clientCode',
-//     'vendorName',
-//     'vendorStatus',
-//     'dateIn',
-//     'dateInDate',
-//     'status',
-//     'caseStatus',
-//     'productType',
-//     'listByEmployee',
-//     'dateOut',
-//     'dateOutInDay',
-//     'sentBy',
-//     'autoOrManual',
-//     'caseDoneBy',
-//     'clientTAT',
-//     'customerCare',
-//     'NameUploadBy',
-//     'ReferBy',
-//     'sentDate',
-//     'sentDateInDay',
-//     'clientType',
-//     'dedupBy',
-//     'ipAddress',
-//     'isRechecked'
-//   ],
-//   employee: [
-//     'caseId',
-//     'attachments',
-//     'remarks',
-//     'name',
-//     'details',
-//     'details1',
-//     'priority',
-//     'correctUPN',
-//     'product',
-//     'updatedProductName',
-//     'accountNumber',
-//     'requirement',
-
-//     'accountNumberDigit',
-//     'bankCode',
-//     'clientCode',
-//     'vendorName',
-//     'vendorStatus',
-//     'dateIn',
-//     'dateInDate',
-//     'status',
-//     'caseStatus',
-//     'productType',
-//     'listByEmployee',
-//     'dateOut',
-//     'dateOutInDay',
-//     'sentBy',
-//     'autoOrManual',
-//     'caseDoneBy',
-//     'clientTAT',
-//     'NameUploadBy',
-//     'ReferBy',
-//     'customerCare',
-//     'sentDate',
-//     'sentDateInDay',
-//     'clientType',
-//     'dedupBy',
-//     'isRechecked'
-//   ],
-//   client: [
-//     'caseId',
-//     'attachments',
-//     'remarks',
-//     'name',
-//     'details',
-//     'details1',
-//     'priority',
-//     'correctUPN',
-//     'product',
-//     'updatedProductName',
-//     'accountNumber',
-//     'requirement',
-
-//     'clientCode',
-//     'dateIn',
-//     'dateInDate',
-//     'status',
-
-//     'caseStatus',
-//     'productType',
-//     'listByEmployee',
-//     'dateOut',
-//     'sentBy',
-//     'caseDoneBy',
-//     'clientTAT',
-//     'customerCare',
-//     'NameUploadBy',
-//     'ReferBy',
-//     'sentDate',
-//     'isRechecked'
-//   ]
-// };
-
-// async function getColumnOrder(role) {
-//   const config = await ColumnConfig.findOne({ role });
-//   return config?.columns || FIELD_ORDERS[role] || [];
-// }
-
-// exports.getTrackerData = async (req, res) => {
-//   try {
-//     const { role, userId, name } = req.query;
-
-//     let projection = {};
-
-//     if (role === "admin") {
-//       projection = {
-//         _id: 0,
-//         attachments: 1,
-//         userId: 0,
-//         caseId: 1,
-//         remarks: 1,
-//         name: 1,
-//         details: 1,
-//         details1: 1,
-//         priority: 1,
-//         correctUPN: 1,
-//         product: 1,
-//         updatedProductName: 1,
-//         accountNumber: 1,
-//         requirement: 1,
-
-//         accountNumberDigit: 1,
-//         bankCode: 1,
-//         clientCode: 1,
-//         vendorName: 1,
-//         vendorStatus:1,
-//         dateIn: 1,
-//         dateInDate: 1,
-//         status: 1,
-//         caseStatus: 1,
-//         productType: 1,
-//         listByEmployee: 1,
-//         dateOut: 1,
-//         dateOutInDay: 1,
-//         sentBy: 1,
-//         autoOrManual: 1,
-//         caseDoneBy: 1,
-//         clientTAT: 1,
-//         customerCare: 1,
-//         NameUploadBy: 1,
-//         ReferBy:1,
-//         sentDate: 1,
-//         sentDateInDay: 1,
-//         clientType: 1,
-//         dedupBy: 1,
-//         ipAddress: 1,
-//         isRechecked: 1
-//       };
-
-//       const trackerData = await KYC.find({}, projection)
-//         .populate("userId", "name email phoneNumber userId")
-//         .sort({ _id: -1 });
-
-//       // const orderedData = trackerData.map(doc => orderFields(doc, FIELD_ORDERS.admin));
-//       const fieldOrder = await getColumnOrder(role);
-//       const orderedData = trackerData.map(doc => orderFields(doc, fieldOrder));
-//       return res.json(orderedData);
-
-//     } else if (role === "employee") {
-//       projection = {
-//         _id: 0,
-//         caseId: 1,
-//         attachments: 1,
-//         remarks: 1,
-//         name: 1,
-//         details: 1,
-//         details1: 1,
-//         priority: 1,
-//         correctUPN: 1,
-//         product: 1,
-//         updatedProductName: 1,
-//         accountNumber: 1,
-//         requirement: 1,
-
-//         accountNumberDigit: 1,
-//         bankCode: 1,
-//         clientCode: 1,
-//         vendorName: 1,
-//         vendorStatus: 1,
-//         dateIn: 1,
-//         dateInDate: 1,
-//         status: 1,
-//         caseStatus: 1,
-//         productType: 1,
-//         listByEmployee: 1,
-//         dateOut: 1,
-//         dateOutInDay: 1,
-//         sentBy: 1,
-//         autoOrManual: 1,
-//         caseDoneBy: 1,
-//         clientTAT: 1,
-//         NameUploadBy: 1,
-//         ReferBy:1,
-//         customerCare: 1,
-//         sentDate: 1,
-//         sentDateInDay: 1,
-//         clientType: 1,
-//         dedupBy: 1,
-//         isRechecked: 1
-//       };
-
-//       const employeeAccess = await EmployeeAccess.findOne({ employeeName: name });
-//       const editableColumns = employeeAccess?.editableColumns || [];
-
-//       const EmpData = await KYC.find({ listByEmployee: name }, projection).sort({ _id: -1 });
-
-//       const orderedData = EmpData.map(doc => orderFields(doc, FIELD_ORDERS.employee));
-//       return res.json({ data: orderedData, editableColumns });
-
-//     } else if (role === "client") {
-//       projection = {
-//         _id: 0,
-//         userId: 0,
-//         caseId: 1,
-//         attachments: 1,
-//         remarks: 1,
-//         name: 1,
-//         details: 1,
-//         details1: 1,
-//         priority: 1,
-//         correctUPN: 1,
-//         product: 1,
-//         updatedProductName: 1,
-//         accountNumber: 1,
-//         requirement: 1,
-
-//         clientCode: 1,
-//         dateIn: 1,
-//         status: 1,
-//         dateInDate: 1,
-//         caseStatus: 1,
-//         productType: 1,
-//         listByEmployee: 1,
-//         dateOut: 1,
-//         sentBy: 1,
-//         caseDoneBy: 1,
-//         clientTAT: 1,
-//         customerCare: 1,
-//         NameUploadBy: 1,
-//         ReferBy:1,
-//         sentDate: 1,
-//         isRechecked: 1
-//       };
-
-//       // Fetch user to check if clientCode exists
-//       const user = await User.findOne({ userId });
-
-//       if (!user) {
-//         return res.status(404).json({ success: false, message: "User not found" });
-//       }
-
-//       // Build query conditionally
-//       const query = { userId };
-//       if (user.role === "client" && user.clientCode) {
-//         query.clientCode = user.clientCode;
-//       }
-
-//       const trackerData = await KYC.find({
-//     $or: [
-//     { userId: user.userId },
-//     { clientCode: user.clientCode }
-//   ]
-// }, projection)
-//         .populate("userId", "name email phoneNumber userId")
-//         .sort({ _id: -1 });
-
-//       const orderedData = trackerData.map(doc => orderFields(doc, FIELD_ORDERS.client));
-//       const clientAccess = await ClientAccess.findOne({ clientName: name });
-//       const editableColumns = clientAccess?.editableColumns || [];
-//       return res.json({ data: orderedData, editableColumns });
-//     }
-
-//     res.status(400).json({ success: false, message: "Invalid role specified" });
-//   } catch (error) {
-//     console.error("Error fetching tracker data:", error);
-//     res.status(500).json({ success: false, message: "Failed to fetch data" });
-//   }
-// };
 exports.singleTrackerData = async (req, res) => {
   try {
     const { role, userId } = req.query;
@@ -3614,7 +3371,7 @@ exports.uploadSingleAttachment = async (req, res) => {
   try {
     const { caseId } = req.body;
     const file = req.file;
-    console.log("Initial file info:", file);
+    // console.log("Initial file info:", file);
 
     if (!file) {
       return res
@@ -3633,7 +3390,7 @@ exports.uploadSingleAttachment = async (req, res) => {
     let actualSize = file.size;
     if (file.size === 0) {
       actualSize = await verifyS3UploadSize(file.key);
-      console.log("Verified actual size:", actualSize);
+      // console.log("Verified actual size:", actualSize);
 
       if (actualSize === null) {
         console.warn(
@@ -4794,7 +4551,7 @@ exports.similarRecords = async (req, res) => {
 exports.copyPasteDedup = async (req, res) => {
   try {
     const { sourceRecordToCopy, targetIds, userId, userName } = req.body;
-    console.log("sourceRecordToCopy:", sourceRecordToCopy);
+    // console.log("sourceRecordToCopy:", sourceRecordToCopy);
 
     const currentDate = new Date();
     const todayString = currentDate.toISOString().split("T")[0]; // yyyy-mm-dd
@@ -4915,7 +4672,7 @@ exports.batchUpdate = async (req, res) => {
     const { caseIds, updates,userName } = req.body;
 
     // console.log("req.body:",req.body)
-    console.log("userName:",userName)
+    // console.log("userName:",userName)
 
     if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
       return res

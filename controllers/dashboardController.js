@@ -13,10 +13,11 @@ const moment = require('moment-timezone');
 
 
 // Consolidated dashboard data endpoint with client role support
+
 exports.getDashboardData = async (req, res) => {
   try {
     const { role, user, clientCode } = req.body;
-    // console.log("clientCode",clientCode)
+    console.log("role",role)
     
     if (!role) {
       return res.status(400).json({ 
@@ -53,8 +54,31 @@ exports.getDashboardData = async (req, res) => {
           message: "Client code is required for client role"
         });
       }
-      baseQuery = { clientCode };
+      
+      // ADD 30-DAY RESTRICTION FOR CLIENT
+      const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
+      const today = moment().format("DD-MM-YYYY");
+      
+      const last30DaysRegex = new RegExp(
+        `^(${generateDateRangeRegex(thirtyDaysAgo, today)})`
+      );
+
+       baseQuery = { clientCode };
+
+      // baseQuery = { 
+      //   $and: [
+      //     { clientCode },
+          {
+            $or: [
+              { createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+              { dateIn: last30DaysRegex }
+            ]
+          }
+      //   ]
+      // };
     }
+
+    
 
     const [stats, trends, activity] = await Promise.all([
       fetchDashboardStats(baseQuery, false, role, user, clientCode),
@@ -86,6 +110,98 @@ exports.getDashboardData = async (req, res) => {
   }
 };
 
+// Add this helper function if not already present
+function generateDateRangeRegex(startDate, endDate) {
+  const start = moment(startDate, "DD-MM-YYYY");
+  const end = moment(endDate, "DD-MM-YYYY");
+  const dates = [];
+
+  let current = start.clone();
+  while (current <= end) {
+    dates.push(current.format("DD-MM-YYYY"));
+    current.add(1, 'day');
+  }
+
+  return dates.join("|");
+}
+
+
+
+
+// exports.getDashboardData = async (req, res) => {
+//   try {
+//     const { role, user, clientCode } = req.body;
+//     // console.log("clientCode",clientCode)
+    
+//     if (!role) {
+//       return res.status(400).json({ 
+//         success: false, 
+//         message: "Role is required" 
+//       });
+//     }
+
+//     // Base query with role enforcement
+//     let baseQuery = {};
+    
+//     if (role === 'employee') {
+//       if (!user) {
+//         return res.json({
+//           success: true,
+//           stats: {
+//             totalCases: 0,
+//             todayCases: 0,
+//             pendingCases: 0,
+//             highPriorityCases: 0,
+//             closedCases: 0,
+//             completionRate: 0
+//           },
+//           trends: [],
+//           activity: []
+//         });
+//       }
+//       baseQuery = { listByEmployee: user };
+//     } 
+//     else if (role === 'client') {
+//       if (!clientCode) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Client code is required for client role"
+//         });
+//       }
+//       baseQuery = { clientCode };
+//     }
+
+//     const [stats, trends, activity] = await Promise.all([
+//       fetchDashboardStats(baseQuery, false, role, user, clientCode),
+//       getVerificationTrendsData(baseQuery, role, user, clientCode),
+//       getRecentActivity(baseQuery, 20, role, user, clientCode)
+//     ]);
+
+//     // Additional client-side data validation
+//     if (role === 'client') {
+//       const invalidItems = activity.filter(item => item.clientCode !== clientCode);
+//       if (invalidItems.length > 0) {
+//         console.error(`Data leak detected: ${invalidItems.length} invalid items for client ${clientCode}`);
+//         activity = activity.filter(item => item.clientCode === clientCode);
+//       }
+//     }
+
+//     res.json({ 
+//       success: true, 
+//       stats, 
+//       trends, 
+//       activity 
+//     });
+//   } catch (error) {
+//     console.error("Dashboard data error:", error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: "Failed to fetch dashboard data" 
+//     });
+//   }
+// };
+
+
 exports.getCaseDetails = async (req, res) => {
   try {
     const { type, year, month, clientType, clientCode, updatedProductName, vendorName, today, download } = req.query;
@@ -109,7 +225,26 @@ exports.getCaseDetails = async (req, res) => {
           message: "Client code is required"
         });
       }
-      query.clientCode = userClientCode;
+      
+      // ADD 30-DAY RESTRICTION FOR CLIENT
+      const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
+      const currentDate = moment().format("DD-MM-YYYY");
+      
+      const last30DaysRegex = new RegExp(
+        `^(${generateDateRangeRegex(thirtyDaysAgo, currentDate)})`
+      );
+
+      query = {
+        $and: [
+          { clientCode: userClientCode },
+          {
+            $or: [
+              { createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+              { dateIn: last30DaysRegex }
+            ]
+          }
+        ]
+      };
     }
 
     // Handle today cases

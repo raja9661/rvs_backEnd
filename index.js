@@ -18,6 +18,7 @@ const AboutUs = require('./routers/aboutUsRouter');
 const support = require('./routers/support.routes');
 const columnConfigRoutes = require("./controllers/columnController");
 const uploadAttachmentRoutes = require("./routers/attachmentUploadRouter");
+const report = require("./routers/report")
 
 
 
@@ -110,6 +111,7 @@ app.use('/api/dashboard', LiveDashRoute);
 app.use('/api/about', AboutUs);
 app.use('/api/support', support);
 app.use("/column-config", columnConfigRoutes);
+app.use('/api/report', report);
 
 
 
@@ -129,10 +131,17 @@ app.get('*', (req, res) => {
 
 connectdb();
 
+const PORT = process.env.PORT || 8080;
 
-app.listen(process.env.PORT || 8080, '0.0.0.0', () => {
-  console.log("Server running on 0.0.0.0:8080");
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running with Socket.io on 0.0.0.0:${PORT}`);
 });
+
+
+
+// app.listen(process.env.PORT || 8080, '0.0.0.0', () => {
+//   console.log("Server running on 0.0.0.0:8080");
+// });
 
 
 // const express = require('express')

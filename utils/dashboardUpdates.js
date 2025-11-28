@@ -292,6 +292,20 @@ const getFormattedDateTime = () => {
   return moment().tz("Asia/Kolkata").format("DD-MM-YYYY, hh:mm:ss A");
 };
 
+function generateDateRangeRegex(startDate, endDate) {
+  const start = moment(startDate, "DD-MM-YYYY");
+  const end = moment(endDate, "DD-MM-YYYY");
+  const dates = [];
+
+  let current = start.clone();
+  while (current <= end) {
+    dates.push(current.format("DD-MM-YYYY"));
+    current.add(1, 'day');
+  }
+
+  return dates.join("|");
+}
+
 // Helper function to parse dateIn field (DD-MM-YYYY, hh:mm:ss A)
 const parseDateInField = (dateString) => {
   if (!dateString) return null;
@@ -479,7 +493,27 @@ async function fetchDashboardStats(
   user,
   clientCode
 ) {
-  const cacheKey = `${role}:${user || clientCode || "admin"}`;
+  const cacheKey = `${role}:${user || clientCode || "admin"}`
+  console.log("base-query:",query)
+  console.log("role:",role)
+
+  if(role === 'client'){
+
+    const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
+          const today = moment().format("DD-MM-YYYY");
+          
+          const last30DaysRegex = new RegExp(
+            `^(${generateDateRangeRegex(thirtyDaysAgo, today)})`
+          );
+
+    query.$or = [
+  { createdAt: { 
+      $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) 
+    } 
+  },
+  { dateIn: last30DaysRegex }
+];
+  }
 
   if (useCache && roleBasedCache.has(cacheKey)) {
     const { stats, timestamp } = roleBasedCache.get(cacheKey);
