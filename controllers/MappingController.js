@@ -435,14 +435,33 @@ exports.editProduct =  async (req, res) => {
     }
   };
 
-  exports.getEmpName = async (req,res) =>{
-    try {
-      const empName = await User.find({role:"employee"})
-      res.status(200).json(empName);
-    } catch (error) {
-      res.status(500).json({ message: "Server error while fetching Employee-Name" });
-    }
+  exports.getEmpName = async (req, res) => {
+  try {
+    const userRes = await User.find(
+      { role: "employee" },
+      { name: 1, _id: 0 } 
+    );
+    const empNames = userRes.map(user => user.name);
+
+    res.status(200).json(empNames);
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error while fetching Employee-Name"
+    });
   }
+};
+
+
+  // exports.getEmpName = async (req,res) =>{
+  //   try {
+  //     const userRes = await User.find({role:"employee"})
+  //     console.log("userRes:",userRes)
+  //     const empName = userRes.name
+  //     res.status(200).json(empName);
+  //   } catch (error) {
+  //     res.status(500).json({ message: "Server error while fetching Employee-Name" });
+  //   }
+  // }
   // Controller
 
   exports.getClientCodes = async (req, res) => {

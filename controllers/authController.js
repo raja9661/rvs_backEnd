@@ -140,6 +140,7 @@ exports.login = async (req, res) => {
 
     const user = await User.findOne({ $or: [{ email:userId }, { userId:userId }] }).select('+password');
     
+    
     if (!user) {
       // console.log("User not found with:", { email, userId });
       return res.status(404).json({ message: "User not found" });
@@ -189,12 +190,21 @@ exports.login = async (req, res) => {
         // user.loginHistory.push(loginRecord);
         await user.save();
 
+        const safeUser = {
+  _id: user._id,
+  name:user.name,
+  userId: user.userId,
+  email: user.email,
+  phoneNumber: user.phoneNumber,
+  role: user.role
+};
+
     // console.log("Login successful for user:", user._id);
     
     res.json({
       message: "Login successful",
       token,
-      user
+      user:safeUser
     });
 
   } catch (error) {
