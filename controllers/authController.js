@@ -196,7 +196,8 @@ exports.login = async (req, res) => {
   userId: user.userId,
   email: user.email,
   phoneNumber: user.phoneNumber,
-  role: user.role
+  role: user.role,
+  clientCode: user.role === "client" ? user.clientCode : undefined
 };
 
     // console.log("Login successful for user:", user._id);

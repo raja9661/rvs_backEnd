@@ -17,7 +17,7 @@ const moment = require('moment-timezone');
 exports.getDashboardData = async (req, res) => {
   try {
     const { role, user, clientCode } = req.body;
-    console.log("role",role)
+    // console.log("req.body",req.body)
     
     if (!role) {
       return res.status(400).json({ 
@@ -206,6 +206,7 @@ exports.getCaseDetails = async (req, res) => {
   try {
     const { type, year, month, clientType, clientCode, updatedProductName, vendorName, today, download } = req.query;
     const { role, user, code } = req.body.requestBody;
+    // console.log("req.body.requestBody",req.body.requestBody)
     const userClientCode = code;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
