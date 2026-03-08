@@ -2786,12 +2786,13 @@ exports.updaterequirement = async (req, res) => {
     const currentDate = moment().tz("Asia/Kolkata");
     const year = currentDate.year().toString();
     const month = (currentDate.month() + 1).toString().padStart(2, "0");
+    const uniqueCaseId = await generateUniqueCaseId();
 
     // Create a new rechecked record (don't modify the original)
     const recheckedRecord = new KYC({
       ...record.toObject(),
       _id: undefined, // Let MongoDB create a new ID
-      caseId: generateCaseId(),
+      caseId: uniqueCaseId || generateCaseId(),
       details: "",
       details1: "",
       priority: "",
