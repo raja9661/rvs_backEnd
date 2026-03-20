@@ -1344,13 +1344,28 @@ exports.getTrackerData = async (req, res) => {
       }
 
       // Calculate date 30 days ago
-      const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
-      const today = moment().format("DD-MM-YYYY");
+      // const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
+      // const today = moment().format("DD-MM-YYYY");
       
-      // Generate regex for last 30 days
-      const last30DaysRegex = new RegExp(
-        `^(${generateDateRangeRegex(thirtyDaysAgo, today)})`
-      );
+      // // Generate regex for last 30 days
+      // const last30DaysRegex = new RegExp(
+      //   `^(${generateDateRangeRegex(thirtyDaysAgo, today)})`
+      // );
+
+      const today = moment();
+
+// Previous month start (FULL month)
+const startDate = moment().subtract(1, 'month').startOf('month');
+
+// Today
+const endDate = today;
+
+const dateRangeRegex = new RegExp(
+  `^(${generateDateRangeRegex(
+    startDate.format("DD-MM-YYYY"),
+    endDate.format("DD-MM-YYYY")
+  )})`
+);
 
       // Build the client query with 30-day restriction that CANNOT be overridden
       query = {
@@ -1372,7 +1387,7 @@ exports.getTrackerData = async (req, res) => {
               // Use createdAt if available (more reliable)
               { createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
               // Fallback to dateIn field with regex matching
-              { dateIn: last30DaysRegex }
+              { dateIn: dateRangeRegex }
             ]
           }
         ],

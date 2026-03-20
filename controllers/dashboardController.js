@@ -54,14 +54,29 @@ exports.getDashboardData = async (req, res) => {
           message: "Client code is required for client role"
         });
       }
+
+      const today = moment();
+
+// Previous month start (FULL month)
+const startDate = moment().subtract(1, 'month').startOf('month');
+
+// Today
+const endDate = today;
+
+const dateRangeRegex = new RegExp(
+  `^(${generateDateRangeRegex(
+    startDate.format("DD-MM-YYYY"),
+    endDate.format("DD-MM-YYYY")
+  )})`
+);
       
       // ADD 30-DAY RESTRICTION FOR CLIENT
-      const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
-      const today = moment().format("DD-MM-YYYY");
+      // const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
+      // const today = moment().format("DD-MM-YYYY");
       
-      const last30DaysRegex = new RegExp(
-        `^(${generateDateRangeRegex(thirtyDaysAgo, today)})`
-      );
+      // const last30DaysRegex = new RegExp(
+      //   `^(${generateDateRangeRegex(thirtyDaysAgo, today)})`
+      // );
 
        baseQuery = { clientCode };
 
@@ -71,7 +86,7 @@ exports.getDashboardData = async (req, res) => {
           {
             $or: [
               { createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
-              { dateIn: last30DaysRegex }
+              { dateIn: dateRangeRegex }
             ]
           }
       //   ]
@@ -226,14 +241,29 @@ exports.getCaseDetails = async (req, res) => {
           message: "Client code is required"
         });
       }
+
+      const today = moment();
+
+// Previous month start (FULL month)
+const startDate = moment().subtract(1, 'month').startOf('month');
+
+// Today
+const endDate = today;
+
+const dateRangeRegex = new RegExp(
+  `^(${generateDateRangeRegex(
+    startDate.format("DD-MM-YYYY"),
+    endDate.format("DD-MM-YYYY")
+  )})`
+);
       
       // ADD 30-DAY RESTRICTION FOR CLIENT
-      const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
-      const currentDate = moment().format("DD-MM-YYYY");
+      // const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
+      // const currentDate = moment().format("DD-MM-YYYY");
       
-      const last30DaysRegex = new RegExp(
-        `^(${generateDateRangeRegex(thirtyDaysAgo, currentDate)})`
-      );
+      // const last30DaysRegex = new RegExp(
+      //   `^(${generateDateRangeRegex(thirtyDaysAgo, currentDate)})`
+      // );
 
       query = {
         $and: [
@@ -241,7 +271,7 @@ exports.getCaseDetails = async (req, res) => {
           {
             $or: [
               { createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
-              { dateIn: last30DaysRegex }
+              { dateIn: dateRangeRegex }
             ]
           }
         ]

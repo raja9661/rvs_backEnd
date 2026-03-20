@@ -499,19 +499,33 @@ async function fetchDashboardStats(
 
   if(role === 'client'){
 
-    const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
-          const today = moment().format("DD-MM-YYYY");
+    const today = moment();
+
+// Previous month start (FULL month)
+const startDate = moment().subtract(1, 'month').startOf('month');
+
+// Today
+const endDate = today;
+
+const dateRangeRegex = new RegExp(
+  `^(${generateDateRangeRegex(
+    startDate.format("DD-MM-YYYY"),
+    endDate.format("DD-MM-YYYY")
+  )})`
+);
+    // const thirtyDaysAgo = moment().subtract(30, 'days').format("DD-MM-YYYY");
+    //       const today = moment().format("DD-MM-YYYY");
           
-          const last30DaysRegex = new RegExp(
-            `^(${generateDateRangeRegex(thirtyDaysAgo, today)})`
-          );
+    //       const last30DaysRegex = new RegExp(
+    //         `^(${generateDateRangeRegex(thirtyDaysAgo, today)})`
+    //       );
 
     query.$or = [
   { createdAt: { 
       $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) 
     } 
   },
-  { dateIn: last30DaysRegex }
+  { dateIn: dateRangeRegex }
 ];
   }
 
